@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { width:1240px; height:1656px; overflow:hidden; font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; background:#000; }
+  /* ===== 04 前提: bold 风格 3 条铁律 ===== */
+  .card {
+    width:1240px; height:1656px; background:#000; color:#fff; padding:90px 80px; position:relative;
+  }
+  .title {
+    text-align:center; font-size:78px; font-weight:900; margin-bottom:70px;
+    text-shadow: 4px 4px 0 #E53E3E;
+  }
+  .rule {
+    display:flex; align-items:flex-start; gap:36px; margin-bottom:52px;
+    border:3px solid #333; border-radius:24px; padding:44px 40px; background:#141414;
+  }
+  .num {
+    width:110px; height:110px; flex-shrink:0; border-radius:50%;
+    background:#F6E05E; color:#000; font-size:56px; font-weight:900;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .rbody { flex:1; }
+  .rtitle { font-size:52px; font-weight:800; margin-bottom:14px; }
+  .rtitle .hl { color:#F7FF00; }
+  .rdesc { font-size:36px; color:#CCC; line-height:1.5; }
+  .cta {
+    position:absolute; bottom:60px; left:80px; right:80px; text-align:center;
+    font-size:40px; color:#F6E05E; font-weight:700;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">装前必须知道 3 件事 ⚠️</div>
+    <div class="rule">
+      <div class="num">1</div>
+      <div class="rbody">
+        <div class="rtitle"><span class="hl">零线</span>全屋预留</div>
+        <div class="rdesc">智能开关选「零火版」,单火版易频闪、易出问题</div>
+      </div>
+    </div>
+    <div class="rule">
+      <div class="num">2</div>
+      <div class="rbody">
+        <div class="rtitle"><span class="hl">中枢网关</span> + 网口</div>
+        <div class="rdesc">放书房/弱电,网口+插座都要留,它是全屋地基</div>
+      </div>
+    </div>
+    <div class="rule">
+      <div class="num">3</div>
+      <div class="rbody">
+        <div class="rtitle"><span class="hl">网络要稳</span></div>
+        <div class="rdesc">断网也要本地化运行,智能家居才真正省心</div>
+      </div>
+    </div>
+    <div class="cta">完整清单后续笔记陆续更新 ✨</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "style": "label-diagram",
+  "style_prefix": "Light minimalist interior, real photo realism, no people, no hands, white and beige walls, light wood floor, soft natural daylight, clean and tidy.",
+  "negative_extra": "english text, english letters, alphabet, ascii, font, lettering, watermark, logo, long paragraphs, sentence, foreign person, white person, black person, western face, cartoon, illustration, drawing",
+  "images": [
+    {
+      "scene": "Wide living room wall elevation view, full wall in frame, light beige wall with white baseboard, several white smart sockets and smart switch panels mounted on wall, warm natural light, high contrast, eye-catching composition for a cover.",
+      "labels": ["智能开关 零火版 130cm", "窗帘电机 220cm", "人在传感器 200cm", "电视墙 插座 50cm", "智能面板 130cm", "空调 智能插座 220cm", "智能中控屏 150cm"]
+    },
+    {
+      "scene": "Entryway interior, light wood floor, shoe cabinet along wall, small wall lamp, clean composition, soft light.",
+      "labels": ["智能门锁 门体", "玄关 智能开关 130cm", "智能面板 130cm", "人在传感器 200cm", "鞋柜 插座 烘鞋机 30cm"]
+    },
+    {
+      "scene": "Modern kitchen, white cabinets, light gray tile backsplash, no people, bright clean, natural light.",
+      "labels": ["轨道插座 台面 110cm", "水浸卫士 水槽下 30cm", "烟感卫士 吊顶 220cm", "天然气卫士 燃气表旁", "冰箱 插座 50cm", "烟机 插座 220cm", "蒸烤箱 插座 50cm"]
+    },
+    {
+      "scene": "Bedroom interior, soft beige wall, bed headboard against wall, bedside table, warm cozy light, realistic.",
+      "labels": ["窗帘电机 220cm", "人在传感器 200cm", "床头 智能插座 70cm", "空调 智能插座 220cm", "门窗传感器 窗框"]
+    },
+    {
+      "scene": "Bathroom interior, white tiles, sink vanity, glass shower, no people, no mirror with face, bright clean light color tiles.",
+      "labels": ["智能镜前灯 插座 130cm", "智能马桶盖 插座 40cm", "浴霸 开关 130cm", "热水器 插座 180cm", "人体感应 传感器 200cm", "水浸卫士 地漏旁 30cm"]
+    },
+    {
+      "scene": "Study room interior, desk against wall, bookshelf, light wood tone, clean organized, natural light.",
+      "labels": ["中枢网关 30cm", "全屋路由 网口+插座 40cm", "智能插座 排插 30cm", "NAS 打印机 插座 40cm", "智能面板 130cm"]
+    },
+    {
+      "scene": "Light beige apartment floor plan sketch on clean background, rooms labeled with small socket icons and Chinese label boxes, neat blueprint-like diagram, top view.",
+      "labels": ["客厅 12点位", "玄关 5点位", "厨房 8点位", "卧室 6点位", "卫生间 4点位", "书房 5点位", "弱电箱 网线+光纤+零线", "插座 五孔 30cm", "智能开关 零火版 130cm", "人在传感器 顶角 200cm"]
+    }
+  ]
+}

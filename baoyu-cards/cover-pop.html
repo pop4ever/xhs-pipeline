@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { width:1240px; height:1656px; overflow:hidden; font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; }
+  /* ===== 封面A: pop / hype 风格 ===== */
+  .cover-a {
+    width:1240px; height:1656px; background:#FFFFFF; position:relative;
+    overflow:hidden;
+  }
+  /* 彩色几何色块 */
+  .blob { position:absolute; border-radius:50%; opacity:0.9; }
+  .b1 { width:320px; height:320px; background:#F56565; top:-80px; left:-80px; }
+  .b2 { width:260px; height:260px; background:#ECC94B; top:120px; right:-60px; }
+  .b3 { width:300px; height:300px; background:#4299E1; bottom:-90px; left:-60px; }
+  .b4 { width:240px; height:240px; background:#48BB78; bottom:80px; right:-70px; }
+  /* 星星贴纸 */
+  .star { position:absolute; font-size:60px; transform:rotate(15deg); }
+  .s1 { top:90px; right:160px; }
+  .s2 { top:420px; left:80px; font-size:48px; transform:rotate(-20deg); }
+  .s3 { bottom:300px; right:90px; font-size:54px; }
+  /* 主内容 */
+  .content { position:absolute; top:0; left:0; width:1240px; height:1656px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; z-index:5; }
+  .kicker {
+    display:inline-block; background:#F56565; color:#fff; font-size:42px; font-weight:800;
+    padding:14px 36px; border-radius:50px; transform:rotate(-4deg); margin-bottom:60px;
+    box-shadow: 4px 4px 0 rgba(0,0,0,0.15);
+  }
+  .q1 { font-size:200px; font-weight:900; color:#F56565; line-height:1.05;
+        -webkit-text-stroke: 5px #fff;
+        text-shadow: 6px 6px 0 rgba(0,0,0,0.25), 0 0 0 #fff; }
+  .sub { font-size:64px; font-weight:700; color:#1A1A1A; margin-top:50px; }
+  .sub em { color:#48BB78; font-style:normal; }
+  /* 爆闪贴纸 */
+  .burst { position:absolute; font-size:150px; top:220px; right:70px; transform:rotate(20deg); z-index:4; }
+</style>
+</head>
+<body>
+  <div class="cover-a">
+    <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
+    <div class="star s1">⭐</div><div class="star s2">✨</div><div class="star s3">⭐</div>
+    <div class="burst">💥</div>
+    <div class="content">
+      <div class="kicker">小米全屋智能</div>
+      <div class="q1">值不值?</div>
+      <div class="sub">装完<em>1年</em>的真实账</div>
+    </div>
+  </div>
+</body>
+</html>

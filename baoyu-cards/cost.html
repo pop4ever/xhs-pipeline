@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { width:1240px; height:1656px; overflow:hidden; font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; }
+  /* ===== 02 成本账: notion 手绘知识卡 ===== */
+  .card {
+    width:1240px; height:1656px; background:#FFFFFF; position:relative; padding:90px 90px;
+  }
+  .title {
+    font-size:84px; font-weight:800; color:#1A1A1A; text-align:center; margin-bottom:18px;
+    position:relative; display:inline-block; left:50%; transform:translateX(-50%);
+  }
+  .title::after {
+    content:""; position:absolute; left:0; right:0; bottom:-6px; height:10px;
+    background:#F9E79F; z-index:-1;
+  }
+  .stitle { font-size:40px; color:#4A4A4A; text-align:center; margin-bottom:70px; }
+  .tiers {
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:34px;
+    width:100%; max-width:1060px; margin:0 auto;
+  }
+  .tier {
+    border:4px solid #1A1A1A; border-radius:24px; padding:50px 30px;
+    display:flex; flex-direction:column; align-items:center; text-align:center; position:relative;
+    min-width:0; box-sizing:border-box;
+  }
+  .t1 { background:#FADBD8; }
+  .t2 { background:#A8D4F0; }
+  .t3 { background:#F9E79F; }
+  .tname { font-size:52px; font-weight:800; color:#1A1A1A; margin-bottom:10px; }
+  .ticon { font-size:72px; margin:14px 0; }
+  .tprice { font-size:72px; font-weight:900; color:#E53E3E; white-space:nowrap; }
+  .tdev { font-size:34px; color:#333; margin-top:10px; font-weight:600; white-space:nowrap; }
+  .tdesc { font-size:32px; color:#555; margin-top:24px; line-height:1.55; }
+  .tag {
+    position:absolute; top:-24px; left:50%; transform:translateX(-50%);
+    background:#1A1A1A; color:#fff; font-size:30px; font-weight:700;
+    padding:8px 24px; border-radius:50px;
+  }
+  .foot { position:absolute; bottom:70px; left:70px; right:70px; font-size:32px; color:#888;
+          border-top:3px dashed #CCC; padding-top:30px; text-align:center; line-height:1.6; }
+  .foot b { color:#1A1A1A; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">全屋智能 5年成本账</div>
+    <div class="stitle">按真实设备数 + 安装费核算(2026-08 参考)</div>
+    <div class="tiers">
+      <div class="tier t1">
+        <div class="tag">入门</div>
+        <div class="tname">基础档</div>
+        <div class="ticon">💡</div>
+        <div class="tprice">¥3,500</div>
+        <div class="tdev">约 20 设备</div>
+        <div class="tdesc">网关+智能开关+门锁+传感器<br>够用的智能体验</div>
+      </div>
+      <div class="tier t2">
+        <div class="tag">主流</div>
+        <div class="tname">进阶档</div>
+        <div class="ticon">🏠</div>
+        <div class="tprice">¥7,500</div>
+        <div class="tdev">约 33 设备</div>
+        <div class="tdesc">基础+智能窗帘+中控屏+安防<br>全屋联动更完整</div>
+      </div>
+      <div class="tier t3">
+        <div class="tag">顶配</div>
+        <div class="tname">顶配档</div>
+        <div class="ticon">👑</div>
+        <div class="tprice">¥14,000</div>
+        <div class="tdev">约 50 设备</div>
+        <div class="tdesc">进阶+全屋灯光+家电联动<br>满配智能家居</div>
+      </div>
+    </div>
+    <div class="foot"><b>不含</b>窗帘布/轨道、部分家电本身 · 含设备+配件+安装 · 小米商城实查价</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,210 @@
+{
+  "name": "MVP-3 Xhs Webhook v2.1 (fix duplicate text)",
+  "nodes": [
+    {
+      "parameters": {"httpMethod":"POST","path":"xhs","responseMode":"responseNode","options":{}},
+      "id": "webhook",
+      "name": "Webhook /xhs",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 300],
+      "webhookId": "xhs-generate"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"accepted\",\"theme\":\"{{ $json.body.theme }}\",\"num_images\":{{ $json.body.num_images || 9 }}}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "theme", "name": "theme", "value": "={{ $('Webhook /xhs').item.json.body.theme }}", "type": "string"},
+            {"id": "num_images", "name": "num_images", "value": "={{ $('Webhook /xhs').item.json.body.num_images || 9 }}", "type": "number"},
+            {"id": "tg_chat_id", "name": "tg_chat_id", "value": "={{ $('Webhook /xhs').item.json.body.tg_chat_id }}", "type": "string"},
+            {"id": "tg_bot_token", "name": "tg_bot_token", "value": "={{ $('Webhook /xhs').item.json.body.tg_bot_token }}", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "params",
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\nconst dir = '/home/david/xhs-examples';\nlet examples = '';\ntry {\n  const files = fs.readdirSync(dir).filter(f => f.endsWith('.md') && !f.includes('README'));\n  const picks = files.sort(() => Math.random() - 0.5).slice(0, 3);\n  examples = picks.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\\n\\n---\\n\\n');\n} catch(e) { examples = '(no examples yet)'; }\nconst examples_escaped = JSON.stringify(examples).slice(1, -1);\nconst prev = $input.first().json;\nreturn [{ json: { ...prev, examples_joined: examples_escaped } }];"
+      },
+      "id": "readexamples",
+      "name": "Read Examples",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8080/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"Qwen3.6-35B-Hauhau\",\n  \"temperature\": 0.85,\n  \"max_tokens\": 3500,\n  \"response_format\": {\"type\": \"json_object\"},\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"你是专业的小红书爆款文案师。严格遵守: (1) 标题15字内, 带emoji, 有钩子;  (2) 正文250-500字, 短句多段, emoji点缀, 有场景感; (3) 结尾3-5个疑问句或CTA;  (4) 8-10个中文tag; (5) {{ $json.num_images }}张配图的英文prompt, 每张60词内, 描述具体场景+光线+构图, 覆盖不同角度/景别.\\n\\n**严格禁止**: 正文body里不允许出现以 # 开头的行或裸tag, tag只在返回JSON的tags数组里, 不许在body里重复; 不许把tags再以 ## 双井号形式重复输出.\\n\\n严格返回JSON: {\\\"title\\\":\\\"...\\\", \\\"body\\\":\\\"...\\\", \\\"tags\\\":[\\\"tag1\\\",...], \\\"image_prompts\\\":[\\\"en1\\\",...共{{ $json.num_images }}个]}\\n\\n参考优秀笔记范例:\\n\\n{{ $json.examples_joined }}\"\n    },\n    {\"role\": \"user\", \"content\": \"主题: {{ $json.theme }}\"}\n  ]\n}",
+        "options": {"timeout": 180000}
+      },
+      "id": "hauhau",
+      "name": "Hauhau",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst raw = $input.first().json.choices[0].message.content;\nconst data = JSON.parse(raw);\nconst prev = $('Extract Params').item.json;\nlet body = (data.body || '').split('\\n').filter(line => !/^\\s*#+\\s*[\\u4e00-\\u9fa5]/.test(line)).join('\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\nconst tagsClean = [...new Set((data.tags || []).map(t => t.replace(/^#+/, '').trim()).filter(Boolean))];\nconst ts = new Date().toISOString().slice(0,19).replace(/[-:T]/g,'');\nconst draftDir = `/home/david/xhs-drafts/${ts}`;\nfs.mkdirSync(draftDir, { recursive: true });\nconst mdPath = `${draftDir}/note.md`;\nconst md = `# ${data.title}\\n\\n${body}\\n\\n${tagsClean.map(t=>'#'+t).join(' ')}\\n`;\nfs.writeFileSync(mdPath, md);\nconst prompts = data.image_prompts || [];\nconst n = Math.min(prev.num_images, prompts.length);\nconst result = [];\nfor (let i = 0; i < n; i++) {\n  result.push({ json: { prompt: prompts[i], index: i + 1, total: n, draft_dir: draftDir, md_path: mdPath, title: data.title, body: body, tags: tagsClean, tg_chat_id: prev.tg_chat_id, tg_bot_token: prev.tg_bot_token }});\n}\nreturn result;"
+      },
+      "id": "parsesplit",
+      "name": "Parse + Save + Split",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {"batchSize": 1, "options": {}},
+      "id": "loop",
+      "name": "Loop Images",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst seed = Math.floor(Math.random() * 1000000000);\nconst workflow = {\n  '1': {class_type:'UNETLoader', inputs:{unet_name:'qwen_image_fp8_e4m3fn.safetensors', weight_dtype:'default'}},\n  '2': {class_type:'CLIPLoader', inputs:{clip_name:'qwen_2.5_vl_7b_fp8_scaled.safetensors', type:'qwen_image'}},\n  '3': {class_type:'VAELoader', inputs:{vae_name:'qwen_image_vae.safetensors'}},\n  '4': {class_type:'ModelSamplingAuraFlow', inputs:{model:['1',0], shift:3.1}},\n  '5': {class_type:'CLIPTextEncode', inputs:{clip:['2',0], text:item.prompt}},\n  '6': {class_type:'CLIPTextEncode', inputs:{clip:['2',0], text:''}},\n  '7': {class_type:'EmptySD3LatentImage', inputs:{width:1024, height:1024, batch_size:1}},\n  '8': {class_type:'KSampler', inputs:{model:['4',0], positive:['5',0], negative:['6',0], latent_image:['7',0], seed, steps:20, cfg:2.5, sampler_name:'euler', scheduler:'simple', denoise:1.0}},\n  '9': {class_type:'VAEDecode', inputs:{samples:['8',0], vae:['3',0]}},\n  '10': {class_type:'SaveImage', inputs:{images:['9',0], filename_prefix:`n8n-xhs-${item.index}`}}\n};\nreturn [{ json: { comfy_body: { prompt: workflow, client_id: 'n8n' }, ...item }}];"
+      },
+      "id": "buildwf",
+      "name": "Build Comfy Workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8189/prompt",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.comfy_body) }}",
+        "options": {"timeout": 30000}
+      },
+      "id": "submit",
+      "name": "Submit Comfy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1700, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst http = require('http');\nconst promptId = $input.first().json.prompt_id;\nconst prev = $('Build Comfy Workflow').item.json;\nasync function getJson(url) { return new Promise((res, rej) => http.get(url, r => { let d=''; r.on('data',c=>d+=c); r.on('end',()=>{try{res(JSON.parse(d))}catch(e){rej(e)}}); }).on('error', rej)); }\nasync function getBinary(url) { return new Promise((res, rej) => http.get(url, r => { const c=[]; r.on('data',b=>c.push(b)); r.on('end',()=>res(Buffer.concat(c))); }).on('error', rej)); }\nconst dl = Date.now() + 900000;\nlet result = null;\nwhile (Date.now() < dl) {\n  const d = await getJson(`http://127.0.0.1:8189/history/${promptId}`);\n  if (d[promptId]) {\n    const e = d[promptId], st = e.status || {};\n    if (st.completed) {\n      for (const nid in e.outputs || {}) {\n        for (const img of (e.outputs[nid].images || [])) {\n          const u = `http://127.0.0.1:8189/view?filename=${img.filename}&subfolder=${img.subfolder||''}&type=output`;\n          const buf = await getBinary(u);\n          const dest = `${prev.draft_dir}/img-${String(prev.index).padStart(2,'0')}-${img.filename}`;\n          fs.writeFileSync(dest, buf);\n          result = { saved: dest, filepath: dest };\n          break;\n        }\n        if (result) break;\n      }\n      break;\n    }\n    if (st.status_str === 'error') { result = { error: 'workflow error' }; break; }\n  }\n  await new Promise(r => setTimeout(r, 3000));\n}\nif (!result) result = { error: 'timeout' };\nreturn [{ json: { ...result, ...prev }}];"
+      },
+      "id": "poll",
+      "name": "Poll + Save",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1900, 200]
+    },
+    {
+      "parameters": {
+        "keepFirstOnly": true,
+        "options": {}
+      },
+      "id": "keepfirst",
+      "name": "Keep First (dedup)",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [1500, 450]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $json.tg_bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $json.tg_chat_id }}\",\n  \"text\": {{ JSON.stringify($json.title + '\\n\\n' + $json.body + '\\n\\n' + ($json.tags || []).map(t=>'#'+t).join(' ')) }}\n}",
+        "options": {"timeout": 30000, "proxy": "http://192.168.1.222:7800"}
+      },
+      "id": "sendtext",
+      "name": "TG SendMessage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1700, 450]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst dir = $('Keep First (dedup)').item.json.draft_dir;\nconst files = fs.readdirSync(dir).filter(f => f.startsWith('img-')).sort();\nconst prev = $('Extract Params').item.json;\nreturn files.map(f => ({\n  json: { filename: f, filepath: `${dir}/${f}`, tg_chat_id: prev.tg_chat_id, tg_bot_token: prev.tg_bot_token },\n  binary: { data: { data: fs.readFileSync(`${dir}/${f}`).toString('base64'), mimeType: 'image/png', fileName: f }}\n}));"
+      },
+      "id": "prepimages",
+      "name": "Prep Images Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1900, 450]
+    },
+    {
+      "parameters": {"batchSize": 1, "options": {}},
+      "id": "loopsend",
+      "name": "Loop Send",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2100, 450]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $json.tg_bot_token }}/sendPhoto",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "chat_id", "value": "={{ $json.tg_chat_id }}"},
+            {"name": "photo", "parameterType": "formBinaryData", "inputDataFieldName": "data"}
+          ]
+        },
+        "options": {"timeout": 60000, "proxy": "http://192.168.1.222:7800"}
+      },
+      "id": "sendphoto",
+      "name": "TG SendPhoto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2300, 450]
+    }
+  ],
+  "connections": {
+    "Webhook /xhs": {"main": [[{"node": "Respond 202", "type": "main", "index": 0}]]},
+    "Respond 202": {"main": [[{"node": "Extract Params", "type": "main", "index": 0}]]},
+    "Extract Params": {"main": [[{"node": "Read Examples", "type": "main", "index": 0}]]},
+    "Read Examples": {"main": [[{"node": "Hauhau", "type": "main", "index": 0}]]},
+    "Hauhau": {"main": [[{"node": "Parse + Save + Split", "type": "main", "index": 0}]]},
+    "Parse + Save + Split": {"main": [[{"node": "Loop Images", "type": "main", "index": 0}]]},
+    "Loop Images": {
+      "main": [
+        [{"node": "Keep First (dedup)", "type": "main", "index": 0}],
+        [{"node": "Build Comfy Workflow", "type": "main", "index": 0}]
+      ]
+    },
+    "Build Comfy Workflow": {"main": [[{"node": "Submit Comfy", "type": "main", "index": 0}]]},
+    "Submit Comfy": {"main": [[{"node": "Poll + Save", "type": "main", "index": 0}]]},
+    "Poll + Save": {"main": [[{"node": "Loop Images", "type": "main", "index": 0}]]},
+    "Keep First (dedup)": {"main": [[{"node": "TG SendMessage", "type": "main", "index": 0}]]},
+    "TG SendMessage": {"main": [[{"node": "Prep Images Binary", "type": "main", "index": 0}]]},
+    "Prep Images Binary": {"main": [[{"node": "Loop Send", "type": "main", "index": 0}]]},
+    "Loop Send": {"main": [[], [{"node": "TG SendPhoto", "type": "main", "index": 0}]]},
+    "TG SendPhoto": {"main": [[{"node": "Loop Send", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "pinData": {}
+}

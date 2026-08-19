@@ -1,0 +1,162 @@
+{
+  "name": "WF1 Kimi Report Import",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xhs/import",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook /xhs/import",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 300],
+      "webhookId": "xhs-import"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"accepted\",\"file_id\":\"{{ $json.body.file_id }}\"}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "file_id", "name": "file_id", "value": "={{ $('Webhook /xhs/import').item.json.body.file_id }}", "type": "string"},
+            {"id": "file_name", "name": "file_name", "value": "={{ $('Webhook /xhs/import').item.json.body.file_name || 'report.md' }}", "type": "string"},
+            {"id": "tg_chat_id", "name": "tg_chat_id", "value": "={{ $('Webhook /xhs/import').item.json.body.tg_chat_id }}", "type": "string"},
+            {"id": "tg_bot_token", "name": "tg_bot_token", "value": "={{ $('Webhook /xhs/import').item.json.body.tg_bot_token }}", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "params",
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/bot{{ $json.tg_bot_token }}/getFile?file_id={{ $json.file_id }}",
+        "options": {"timeout": 15000, "proxy": "http://192.168.1.222:7800"}
+      },
+      "id": "getfile",
+      "name": "TG getFile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/file/bot{{ $('Extract Params').item.json.tg_bot_token }}/{{ $json.result.file_path }}",
+        "options": {"timeout": 30000, "proxy": "http://192.168.1.222:7800", "response": {"response": {"responseFormat": "text"}}}
+      },
+      "id": "download",
+      "name": "Download MD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\nconst prev = $('Extract Params').item.json;\nconst mdContent = $input.first().json.data || $input.first().json;\nconst text = typeof mdContent === 'string' ? mdContent : JSON.stringify(mdContent);\n\n// slugify filename\nconst ts = new Date().toISOString().slice(0,10);\nconst safeName = prev.file_name.replace(/[^\\w\\u4e00-\\u9fa5.-]/g,'_').substring(0,50);\nconst reportPath = `/home/david/xhs-corpus/weekly-reports/${ts}-${safeName}`;\nfs.mkdirSync(path.dirname(reportPath), { recursive: true });\nfs.writeFileSync(reportPath, text);\n\nreturn [{ json: { report_path: reportPath, md_content: text, md_length: text.length, ...prev }}];"
+      },
+      "id": "savemd",
+      "name": "Save MD to corpus",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8080/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"Qwen3.6-35B-Hauhau\",\n  \"temperature\": 0.3,\n  \"max_tokens\": 6000,\n  \"response_format\": {\"type\": \"json_object\"},\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"你是小红书商业情报解析器。从输入的 md 周报里提取结构化数据。\\n\\n**类目 taxonomy 严格锁死为以下 8 类** (报告里的其他分类映射进这 8 类, 不许新造):\\n- 美妆个护\\n- 家居家装\\n- 母婴育儿\\n- 服饰穿搭\\n- 食品饮料\\n- 萌宠动物\\n- 3C数码\\n- 旅游户外\\n\\n**严格返回 JSON**:\\n{\\n  \\\"report_date\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"categories_meta\\\": [{\\\"name\\\":\\\"美妆个护\\\",\\\"tier\\\":1,\\\"insight\\\":\\\"一句话概括本类目本周态势, 从报告里摘\\\"}, ...],\\n  \\\"creators\\\": [{\\\"name\\\":\\\"程十安\\\",\\\"category\\\":\\\"美妆个护\\\",\\\"tier\\\":\\\"top\\\",\\\"homepage\\\":\\\"...\\\",\\\"followers\\\":\\\"2400万+\\\",\\\"tagline\\\":\\\"...\\\"}, ...],\\n  \\\"hot_notes\\\": [{\\\"creator\\\":\\\"程十安\\\",\\\"category\\\":\\\"美妆个护\\\",\\\"title\\\":\\\"肿泡眼化妆教程系列\\\",\\\"metrics\\\":{\\\"likes\\\":null,\\\"collects\\\":null,\\\"followers_gained\\\":null,\\\"monetization_cny\\\":500000},\\\"metrics_raw\\\":\\\"单条广告报价50万\\\",\\\"note\\\":\\\"...\\\"}, ...],\\n  \\\"trends\\\": [\\\"趋势1一句话\\\", \\\"趋势2\\\"]\\n}\\n\\n只保留 hot_notes.metrics 里能明确从报告里提取到的数字, 无法提取则 null. metrics_raw 保留原文描述。tier 值 top/mid/腰部/尾部。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"请解析下面的 md 周报:\\n\\n{{ JSON.stringify($json.md_content).slice(1,-1) }}\"\n    }\n  ]\n}",
+        "options": {"timeout": 300000}
+      },
+      "id": "hauhau",
+      "name": "Hauhau Parse",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst raw = $input.first().json.choices[0].message.content;\nconst data = JSON.parse(raw);\nconst prev = $('Save MD to corpus').item.json;\n\nconst corpusDir = '/home/david/xhs-corpus';\nconst hotPath = `${corpusDir}/hot_notes.jsonl`;\nconst archivePath = `${corpusDir}/hot_notes_archive.jsonl`;\n\n// Load existing hot_notes\nlet existing = [];\ntry {\n  const content = fs.readFileSync(hotPath, 'utf8');\n  existing = content.split('\\n').filter(l => l.trim()).map(l => JSON.parse(l));\n} catch(e) {}\n\n// Dedupe key: creator + title\nconst existingKeys = new Set(existing.map(n => `${n.creator}|${n.title}`));\n\n// Archive 8 weeks old\nconst nowMs = Date.now();\nconst weekMs = 7 * 24 * 3600 * 1000;\nconst cutoff = nowMs - 8 * weekMs;\nconst toArchive = existing.filter(n => new Date(n.added_at).getTime() < cutoff);\nconst toKeep = existing.filter(n => new Date(n.added_at).getTime() >= cutoff);\n\nif (toArchive.length > 0) {\n  fs.appendFileSync(archivePath, toArchive.map(n => JSON.stringify(n)).join('\\n') + '\\n');\n}\n\n// Add new hot_notes (dedupe)\nconst reportDate = data.report_date || new Date().toISOString().slice(0,10);\nconst newNotes = [];\nfor (const n of (data.hot_notes || [])) {\n  const key = `${n.creator}|${n.title}`;\n  if (existingKeys.has(key)) continue;\n  newNotes.push({\n    ...n,\n    added_at: new Date().toISOString(),\n    source_report: prev.report_path.split('/').pop(),\n    source_date: reportDate,\n    initial_score: 0.5\n  });\n}\n\n// Write hot_notes.jsonl (kept + new)\nconst allActive = [...toKeep, ...newNotes];\nfs.writeFileSync(hotPath, allActive.map(n => JSON.stringify(n)).join('\\n') + (allActive.length ? '\\n' : ''));\n\n// Also save creators + categories_meta (for future use)\nfs.writeFileSync(`${corpusDir}/creators.jsonl`, (data.creators||[]).map(c => JSON.stringify({...c, updated_at: new Date().toISOString()})).join('\\n') + '\\n');\nfs.writeFileSync(`${corpusDir}/categories_meta.json`, JSON.stringify(data.categories_meta || [], null, 2));\nfs.writeFileSync(`${corpusDir}/trends.md`, `# Trends ${reportDate}\\n\\n${(data.trends || []).map((t,i) => `${i+1}. ${t}`).join('\\n')}\\n`);\n\nreturn [{ json: {\n  new_hot_notes: newNotes.length,\n  archived: toArchive.length,\n  active_total: allActive.length,\n  creators_updated: (data.creators||[]).length,\n  categories: (data.categories_meta||[]).map(c=>c.name),\n  report_date: reportDate,\n  ...prev\n}}];"
+      },
+      "id": "merge",
+      "name": "Merge hot_notes + Archive",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8080/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"Qwen3.6-35B-Hauhau\",\n  \"temperature\": 0.4,\n  \"max_tokens\": 3500,\n  \"response_format\": {\"type\": \"json_object\"},\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"你是小红书文案风格分析师。基于给定的爆款笔记标题+数据, 提取每个类目的可复用风格模板。\\n\\n输出结构化 JSON:\\n{\\n  \\\"美妆个护\\\": {\\\"hook_patterns\\\":[\\\"具体钩子1\\\",\\\"具体钩子2\\\",\\\"具体钩子3\\\"],\\\"emoji_density\\\":\\\"medium/high\\\",\\\"tone\\\":\\\"权威科普/闺蜜安利/干货教程\\\",\\\"structure\\\":\\\"标题-痛点-方案-效果-CTA / 场景-测评-推荐\\\",\\\"typical_length_chars\\\":300},\\n  ...对每个类目\\n}\\n\\nhook_patterns 要具体, 例如 '“姐妹们！这个XX真的绝了” 情绪型开头' 而不是 '使用悬念开头'。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"这是各类目的爆款笔记 (title 数组):\\n\\n{{ JSON.stringify(\n  Object.fromEntries(\n    ['美妆个护','家居家装','母婴育儿','服饰穿搭','食品饮料','萌宠动物','3C数码','旅游户外'].map(cat => [\n      cat,\n      require('fs').readFileSync('/home/david/xhs-corpus/hot_notes.jsonl','utf8').split('\\n').filter(l=>l.trim()).map(l=>JSON.parse(l)).filter(n=>n.category===cat).map(n=>n.title).slice(0,10)\n    ])\n  )\n).slice(1,-1) }}\"\n    }\n  ]\n}",
+        "options": {"timeout": 240000}
+      },
+      "id": "stylegen",
+      "name": "Generate Category Style",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst raw = $input.first().json.choices[0].message.content;\nconst styles = JSON.parse(raw);\n\nlet md = `# Category Style Reference\\n\\nGenerated: ${new Date().toISOString()}\\n\\n`;\nfor (const [cat, s] of Object.entries(styles)) {\n  md += `## ${cat}\\n\\n`;\n  md += `- **Tone**: ${s.tone || 'N/A'}\\n`;\n  md += `- **Emoji Density**: ${s.emoji_density || 'medium'}\\n`;\n  md += `- **Typical Length**: ${s.typical_length_chars || 300} chars\\n`;\n  md += `- **Structure**: ${s.structure || 'N/A'}\\n`;\n  md += `- **Hook Patterns**:\\n`;\n  for (const h of (s.hook_patterns || [])) md += `  - ${h}\\n`;\n  md += `\\n`;\n}\nfs.writeFileSync('/home/david/xhs-corpus/category_style.md', md);\n\nreturn [{ json: { style_categories: Object.keys(styles), style_path: '/home/david/xhs-corpus/category_style.md', ...$('Merge hot_notes + Archive').item.json }}];"
+      },
+      "id": "savestyle",
+      "name": "Save Category Style",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $('Extract Params').item.json.tg_bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Extract Params').item.json.tg_chat_id }}\",\n  \"text\": {{ JSON.stringify('✅ Kimi 周报导入完成\\n\\n📅 报告日期: ' + $json.report_date + '\\n📊 新增 hot_notes: ' + $json.new_hot_notes + ' 条\\n🗄 归档旧 notes: ' + $json.archived + ' 条\\n📈 当前活跃: ' + $json.active_total + ' 条\\n👥 博主更新: ' + $json.creators_updated + ' 人\\n🎨 style 已重生: ' + ($json.style_categories || []).length + ' 类\\n\\n分类: ' + ($json.categories||[]).join(', ')) }}\n}",
+        "options": {"timeout": 30000, "proxy": "http://192.168.1.222:7800"}
+      },
+      "id": "report",
+      "name": "TG Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2100, 300]
+    }
+  ],
+  "connections": {
+    "Webhook /xhs/import": {"main": [[{"node": "Respond 202", "type": "main", "index": 0}]]},
+    "Respond 202": {"main": [[{"node": "Extract Params", "type": "main", "index": 0}]]},
+    "Extract Params": {"main": [[{"node": "TG getFile", "type": "main", "index": 0}]]},
+    "TG getFile": {"main": [[{"node": "Download MD", "type": "main", "index": 0}]]},
+    "Download MD": {"main": [[{"node": "Save MD to corpus", "type": "main", "index": 0}]]},
+    "Save MD to corpus": {"main": [[{"node": "Hauhau Parse", "type": "main", "index": 0}]]},
+    "Hauhau Parse": {"main": [[{"node": "Merge hot_notes + Archive", "type": "main", "index": 0}]]},
+    "Merge hot_notes + Archive": {"main": [[{"node": "Generate Category Style", "type": "main", "index": 0}]]},
+    "Generate Category Style": {"main": [[{"node": "Save Category Style", "type": "main", "index": 0}]]},
+    "Save Category Style": {"main": [[{"node": "TG Report", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "pinData": {}
+}

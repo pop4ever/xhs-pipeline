@@ -1,0 +1,119 @@
+{
+  "name": "WF3 Xhs Feedback Handler",
+  "nodes": [
+    {
+      "parameters": {"httpMethod":"POST","path":"xhs/feedback","responseMode":"responseNode","options":{}},
+      "id": "webhook",
+      "name": "Webhook /xhs/feedback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 300],
+      "webhookId": "xhs-feedback"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"accepted\",\"data\":\"{{ $json.body.data }}\"}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($('Webhook /xhs/feedback').item.json.body?.data || '').trim();\nconst parts = raw.split(':');\nif (parts.length < 3 || parts[0] !== 'xhs') {\n  return [{ json: { error: 'invalid callback data', raw }}];\n}\nconst draft_id = parts[1];\nconst action = parts[2];\nconst VALID_ACTIONS = ['love','like','discard','save_seed'];\nif (!VALID_ACTIONS.includes(action)) {\n  return [{ json: { error: 'invalid action', action, raw }}];\n}\n\nconst fs = require('fs');\nconst draftDir = `/home/david/xhs-drafts/${draft_id}`;\nconst notePath = `${draftDir}/note.md`;\n\nlet noteContent = '';\nlet title = '';\nlet body = '';\nlet tags = [];\nlet category = 'unknown';\ntry {\n  noteContent = fs.readFileSync(notePath, 'utf8');\n  // Parse title (# ...)\n  const titleMatch = noteContent.match(/^#\\s+(.+)$/m);\n  if (titleMatch) title = titleMatch[1].trim();\n  // Parse category from footer: _生成基于 <cat> 类目_\n  const catMatch = noteContent.match(/生成基于\\s+(\\S+)\\s+类目/);\n  if (catMatch) category = catMatch[1];\n  // Body = between title and tags\n  // Split content into lines; body is between title line and tag line\n  const lines = noteContent.split('\\n');\n  const bodyLines = [];\n  let inBody = false;\n  for (const line of lines) {\n    if (line.startsWith('# ')) { inBody = true; continue; }\n    if (line.trim().startsWith('#') && line.includes(' #')) break; // tag line\n    if (line.trim() === '---') break;\n    if (inBody) bodyLines.push(line);\n  }\n  body = bodyLines.join('\\n').trim();\n  // Parse tag line\n  const tagLineMatch = noteContent.match(/^(#[^\\n#][^\\n]*(?:\\s#[^\\n]*)+)$/m);\n  if (tagLineMatch) {\n    tags = tagLineMatch[1].split(/\\s+/).map(t => t.replace(/^#/, '').trim()).filter(Boolean);\n  }\n} catch (e) {\n  return [{ json: { error: 'draft not found', draft_id, notePath }}];\n}\n\nreturn [{ json: { draft_id, action, category, title, body, tags, note_path: notePath, draft_dir: draftDir }}];"
+      },
+      "id": "parse",
+      "name": "Parse Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "typeValidation": "loose"},
+          "conditions": [
+            {"id":"has_err","leftValue":"={{ $json.error }}","rightValue":"","operator":{"type":"string","operation":"notEmpty"}}
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "iferror",
+      "name": "Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log('WF3 parse error:', JSON.stringify($input.first().json));\nreturn [{ json: $input.first().json }];"
+      },
+      "id": "logerr",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "typeValidation": "loose"},
+          "conditions": [
+            {"id":"is_save","leftValue":"={{ $json.action }}","rightValue":"save_seed","operator":{"type":"string","operation":"equals"}}
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ifsave",
+      "name": "Is save_seed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst p = $input.first().json;\n\n// slug from title (first 30 chars, safe chars)\nconst slug = (p.title || 'untitled').replace(/[^\\w\\u4e00-\\u9fa5]/g,'_').substring(0,30);\nconst seedPath = `/home/david/xhs-corpus/seed_notes/${p.draft_id}-${slug}.md`;\n\n// YAML frontmatter\nconst fm = `---\\ncategory: ${p.category}\\nadded_at: ${new Date().toISOString()}\\nsource: user-saved-from-generated\\ninitial_score: 0.7\\ndraft_id: ${p.draft_id}\\ntags: [${(p.tags || []).map(t => `\"${t}\"`).join(', ')}]\\n---\\n\\n`;\n\n// Compose seed content: title + body (no tags footer, no metadata footer)\nconst seedContent = fm + `# ${p.title}\\n\\n${p.body}\\n`;\n\nfs.writeFileSync(seedPath, seedContent);\n\n// Also log score = +0.5 for saved-as-seed\nconst scoreEntry = {\n  draft_id: p.draft_id,\n  category: p.category,\n  action: 'save_seed',\n  delta: 0.5,\n  ts: new Date().toISOString()\n};\nfs.appendFileSync('/home/david/xhs-corpus/scores.jsonl', JSON.stringify(scoreEntry) + '\\n');\n\nreturn [{ json: { ...p, seed_path: seedPath, saved: true }}];"
+      },
+      "id": "saveseed",
+      "name": "Save Seed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst p = $input.first().json;\n\nconst DELTA_MAP = {\n  'love': 0.4,\n  'like': 0.1,\n  'discard': -0.3\n};\nconst delta = DELTA_MAP[p.action] ?? 0;\n\nconst scoreEntry = {\n  draft_id: p.draft_id,\n  category: p.category,\n  action: p.action,\n  delta,\n  ts: new Date().toISOString()\n};\nfs.appendFileSync('/home/david/xhs-corpus/scores.jsonl', JSON.stringify(scoreEntry) + '\\n');\n\nreturn [{ json: { ...p, delta, saved: true }}];"
+      },
+      "id": "savescore",
+      "name": "Append Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 500]
+    }
+  ],
+  "connections": {
+    "Webhook /xhs/feedback": {"main": [[{"node":"Respond 202","type":"main","index":0}]]},
+    "Respond 202": {"main": [[{"node":"Parse Callback","type":"main","index":0}]]},
+    "Parse Callback": {"main": [[{"node":"Has Error?","type":"main","index":0}]]},
+    "Has Error?": {
+      "main": [
+        [{"node":"Log Error","type":"main","index":0}],
+        [{"node":"Is save_seed?","type":"main","index":0}]
+      ]
+    },
+    "Is save_seed?": {
+      "main": [
+        [{"node":"Save Seed","type":"main","index":0}],
+        [{"node":"Append Score","type":"main","index":0}]
+      ]
+    }
+  },
+  "settings": {"executionOrder":"v1"},
+  "pinData": {}
+}

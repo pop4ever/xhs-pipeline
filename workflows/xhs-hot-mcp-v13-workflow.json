@@ -1,0 +1,729 @@
+{
+  "name": "XHS-Hot MCP Pipeline v1.3 (verify+gate+prompt)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xhs-hot3",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-hot",
+      "name": "Webhook /xhs-hot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1480,
+        0
+      ],
+      "webhookId": "xhs-hot3-generate"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"accepted\",\"links\":{{ $json.body.links.length }}}",
+        "options": {}
+      },
+      "id": "respond-202",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "links",
+              "name": "links",
+              "value": "={{ $('Webhook /xhs-hot').item.json.body.links }}",
+              "type": "string"
+            },
+            {
+              "id": "num_images",
+              "name": "num_images",
+              "value": "={{ $('Webhook /xhs-hot').item.json.body.num_images || 3 }}",
+              "type": "number"
+            },
+            {
+              "id": "tg_chat_id",
+              "name": "tg_chat_id",
+              "value": "={{ $('Webhook /xhs-hot').item.json.body.tg_chat_id }}",
+              "type": "string"
+            },
+            {
+              "id": "tg_bot_token",
+              "name": "tg_bot_token",
+              "value": "={{ $('Webhook /xhs-hot').item.json.body.tg_bot_token }}",
+              "type": "string"
+            },
+            {
+              "id": "drafts_root",
+              "name": "drafts_root",
+              "value": "/home/david/xhs-drafts",
+              "type": "string"
+            },
+            {
+              "id": "cover_url",
+              "name": "cover_url",
+              "value": "http://127.0.0.1:8765/cover",
+              "type": "string"
+            },
+            {
+              "id": "theme",
+              "name": "theme",
+              "value": "={{ $('Webhook /xhs-hot').item.json.body.theme || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "scene_plan",
+              "name": "scene_plan",
+              "value": "={{ $('Webhook /xhs-hot').item.json.body.scene_plan || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "cover_indices",
+              "name": "cover_indices",
+              "value": "={{ $('Webhook /xhs-hot').item.json.body.cover_indices || [1] }}",
+              "type": "json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-params",
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1140,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Extract Params').item.json;\n// 防御: Set 节点可能把 links 数组序列化成字符串 \"[\"...\"]\", 这里兼容两种\nlet links = p.links;\nif (typeof links === 'string') {\n  const t = links.trim();\n  if (t.startsWith('[')) {\n    try { links = JSON.parse(t); } catch(e) { links = [t]; }\n  } else {\n    links = [t];\n  }\n}\nconst arr = Array.isArray(links) ? links : [links].filter(Boolean);\nif (arr.length === 0) throw new Error('No links provided');\nreturn arr.map((url, i) => ({ json: { url, index: i + 1, total: arr.length } }));",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "split-links",
+      "name": "Split Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const http = require('http');\nfunction parseUrl(url) {\n  const m = url.match(/^https?:\\/\\/([^:\\/]+)(?::(\\d+))?([^?]*)/);\n  if (!m) throw new Error('bad url: ' + url);\n  return { hostname: m[1], port: m[2] ? parseInt(m[2]) : 80, path: m[3] || '/' };\n}\nfunction request(opts, payload) {\n  return new Promise((res, rej) => {\n    const body = payload ? JSON.stringify(payload) : null;\n    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };\n    if (opts.session) headers['mcp-session-id'] = opts.session;\n    if (body) headers['Content-Length'] = Buffer.byteLength(body);\n    const req = http.request({ hostname: opts.hostname, port: opts.port, path: opts.path, method: opts.method, headers, timeout: opts.timeout || 60000 }, r => {\n      let d = ''; r.on('data', c => d += c); r.on('end', () => {\n        let jsonStr = d;\n        const m = d.match(/^data: (.*)$/m);\n        if (m) jsonStr = m[1];\n        try { res({ status: r.statusCode, session: r.headers['mcp-session-id'], body: JSON.parse(jsonStr) }); }\n        catch(e) { rej(new Error('bad mcp resp: ' + d.slice(0, 300))); }\n      });\n    });\n    req.on('error', rej); req.on('timeout', () => { req.destroy(); rej(new Error('timeout')); });\n    if (body) req.write(body);\n    req.end();\n  });\n}\n\nconst url = $input.first().json.url;\nconst u = parseUrl('http://192.168.1.41:5556/mcp');\n\n// 1. initialize (顶层 await)\nconst init = await request({ hostname: u.hostname, port: u.port, path: '/mcp', method: 'POST' }, {\n  jsonrpc: '2.0', id: 0, method: 'initialize',\n  params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'n8n-xhs', version: '1.0' } }\n});\nconst session = init.session;\nif (!session) throw new Error('no mcp-session-id from initialize');\n// 2. tools/call\nconst call = await request({ hostname: u.hostname, port: u.port, path: '/mcp', method: 'POST', session }, {\n  jsonrpc: '2.0', id: 1, method: 'tools/call',\n  params: { name: 'get_detail_data', arguments: { url } }\n});\nconst sc = (call.body && call.body.result && call.body.result.structuredContent) || {};\nconst raw = (call.body && call.body.result && call.body.result.content && call.body.result.content[0] && call.body.result.content[0].text) || '';\nlet data = null;\ntry { data = JSON.parse(raw).data; } catch(e) {}\nreturn [{ json: { message: sc.message || '', data: data || {}, raw_mcp: raw.slice(0, 500) } }];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "mcp-xhs",
+      "name": "MCP XHS-Downloader (get detail)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all();\nconst notes = [];\nfor (const row of rows) {\n  const d = row.json.data || {};\n  if (!d['作品标题']) continue;\n  notes.push({\n    title: d['作品标题'] || '',\n    desc: (d['作品描述'] || '').slice(0, 600),\n    tags: (d['作品标签'] || '').split(/\\s+/).filter(Boolean).slice(0, 10),\n    likes: d['点赞数量'] || '',\n    collects: d['收藏数量'] || '',\n    comments: d['评论数量'] || '',\n    author: d['作者昵称'] || '',\n    type: d['作品类型'] || '',\n    url: d['作品链接'] || ''\n  });\n}\nconst params = $('Extract Params').item.json;\nreturn [{ json: { notes, theme: params.theme || '', num_images: params.num_images, tg_chat_id: params.tg_chat_id, tg_bot_token: params.tg_bot_token, drafts_root: params.drafts_root, cover_url: params.cover_url }}];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "parse-mcp",
+      "name": "Parse MCP Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\n// 跨节点引用 Extract Params (scene_plan/cover_indices 不在 Parse MCP Results 透传里, 坑15/16教训)\nconst ep = $('Extract Params').item.json;\nconst scenePlanRaw = (ep.scene_plan !== undefined && ep.scene_plan !== '') ? ep.scene_plan : (p.scene_plan || '');\nconst coverIdx = (ep.cover_indices && ep.cover_indices.length) ? ep.cover_indices : (p.cover_indices || [1]);\nconst notes = p.notes || [];\nconst samplesText = notes.map((n, i) => `热度样本${i+1}【${n.author}】${n.title}\\n(赞${n.likes} 藏${n.collects} 评${n.comments})\\n正文摘要: ${n.desc.slice(0, 300)}\\n标签: ${n.tags.join(' ')}`).join('\\n\\n---\\n\\n');\n\nconst sysPrompt = `你是专业的小红书爆款文案师, 账号定位为家居装修干货号「宅有宅的道理」。严格遵守: (1) 标题15字内, 带emoji, 有钩子, 有代入感, 格式参考「XX | 元素1+元素2+元素3, 情感句」; (2) 正文250-600字, 短句多段, emoji点缀, 有场景感, 干货密度高, 可直接照做; (3) 结尾3-5个疑问句或CTA, 但禁止诱导互动(禁「评论区扣XX领资料」「私信领包」等); (4) 8-10个中文tag; (5) ${p.num_images}张配图的英文prompt, 每张60词内, 描述具体场景+光线+构图, 覆盖不同角度/景别; (6) 配图场景按主题自动判断: 施工/水电/硬装/改造过程类主题→真实装修现场(毛坯墙/开槽/管线/工具/材料, 干净利落), 严格禁止摆放成品家具(沙发/电视柜/床/窗帘等), 因为现场还未完工; 风格/软装/完工效果类主题→成品效果图(带完整家具+软装+灯光氛围); (7) 所有image_prompt严格禁止出现任何文字、字母、标签、表格、印刷品、logo、水印(尤其禁止英文字母/英文单词), 只描述场景/物体/光线/构图; 严禁画尺寸标注(如1.3m/0.3m)、严禁画带字的便签/标签/清单纸/图纸/刻度尺/包装说明, 这些必然渲染出文字乱码, 一律用无字的实物代替(如纯色胶带/空白便利贴/留白); (8) 若配图中出现人物, 一律为中国人/东亚人(中国装修工人/中国屋主), 严禁外国人/白人/黑人或洋人面孔; (9) 第1张配图(封面图)必须强冲击力抓眼球: 大场景/强透视/高对比光线/色彩鲜明, 一眼抓住注意力, 适合做小红书封面.\n\n**去AI味/增人味**: 像真人装修过、踩过坑的屋主在分享, 不要像AI客服或营销号。避免「首先/其次/总而言之/值得注意的是/让我们」等AI腔词; 避免过度工整的排比句; 多用口语、具体场景细节、真实踩坑/翻车经历、价格和尺寸等实在信息; emoji 克制使用不堆砌; 语气像跟朋友安利, 不是播报新闻.\n\n**严格禁止**: 正文body里不允许出现以 # 开头的行或裸tag, tag只在返回JSON的tags数组里, 不许在body里重复; 不许把tags再以 ## 双井号形式重复输出.\n\n严格返回JSON: {\"title\":\"...\", \"body\":\"...\", \"tags\":[\"tag1\",...共8-10个], \"image_prompts\":[\"en1\",...共${p.num_images}个]}`;\n\nconst theme = p.theme ? p.theme.trim() : '';\nconst userPrompt = theme ? `下面是小红书热榜/高赞笔记的真实数据(仅作爆款结构参考: 标题钩子/情绪/干货密度):\n\n${samplesText}\n\n请围绕指定主题创作一篇属于「宅有宅的道理」账号的全新装修干货笔记:\n【指定主题】${theme}\n\n创作要求:\n1. 严格围绕「${theme}」展开, 这是装修/软装/改造相关主题, 属于账号垂类。\n2. 内容必须干货可照做: 具体到产品型号、尺寸、安装位置、布线/布局逻辑、预算、避坑点等, 教用户怎么做这件事。\n3. 从上面热榜笔记提炼爆款结构(标题钩子/情绪节奏/干货密度/互动提问)移植到本主题, 但不照搬原文。\n4. 动笔前自检: 能否用一句话说清「教用户怎么做${theme}」? 能, 才动笔。\n5. 根据主题判断配图场景: 施工/水电/硬装/改造过程类→真实装修现场(禁成品家具); 风格/软装/完工效果类→成品效果图(带完整家具软装)。6. 所有image_prompt严格禁止文字/字母/标签/表格/印刷品/logo/水印(尤其禁英文); 严禁画尺寸标注、带字的便签/清单纸/图纸/刻度尺(必出乱码), 用无字实物代替。7. 人物一律中国人/东亚人(中国工人/屋主), 严禁外国人面孔。7. 像真人屋主分享, 去AI味增人味(见system要求)。` : `下面是小红书热榜/高赞笔记的真实数据, 请提炼这些内容的爆款共性(主题方向、情绪钩子、干货结构), 并创作一篇属于「宅有宅的道理」账号的全新装修干货笔记(可迭代升级选题, 不要照抄原文):\n\n${samplesText}\n\n创作要求:\n1. 严格围绕「装修/软装/收纳/改造」这一账号垂类创作, 禁止跨界到美妆/母婴/数码/穿搭/美食等其他垂类。\n2. 动笔前先自检: 这篇笔记能否用一句话说清「教用户怎么做某件装修/软装/收纳的事」? 能, 才动笔。\n3. 如果热榜内容与装修无关, 提炼其爆款结构(标题钩子/情绪/干货密度)移植到装修题材上, 而不是照搬主题。\n4. 根据笔记主题判断配图场景: 施工/水电/硬装/改造过程类→真实装修现场(禁成品家具); 风格/软装/完工效果类→成品效果图(带完整家具软装)。5. 所有image_prompt严格禁止文字/字母/标签/表格/印刷品/logo/水印(尤其禁英文); 严禁画尺寸标注、带字的便签/清单纸/图纸/刻度尺(必出乱码), 用无字实物代替。6. 人物一律中国人/东亚人(中国工人/屋主), 严禁外国人面孔。6. 像真人屋主分享, 去AI味增人味(见system要求)。`;\n\n// ===== scene_plan 支持: 解析方案, 配图数量/风格由方案决定 =====\nlet scenePlan = null;\nif (scenePlanRaw && typeof scenePlanRaw === 'string') {\n  try { scenePlan = JSON.parse(scenePlanRaw); } catch(e) { console.log('scene_plan parse err', e.message); }\n} else if (scenePlanRaw && typeof scenePlanRaw === 'object') {\n  scenePlan = scenePlanRaw;\n}\nconst sceneCount = (scenePlan && Array.isArray(scenePlan.images)) ? scenePlan.images.length : 0;\nconst effNum = sceneCount > 0 ? sceneCount : p.num_images;\nconst imgReq = sceneCount > 0\n  ? `(${sceneCount}) 配图由外部场景方案(scene_plan)精确指定, 你**不需要**生成image_prompts, 返回空数组[]即可; 配图场景/标注内容不用你脑补`\n  : `(5) ${p.num_images}张配图的英文prompt, 每张60词内, 描述具体场景+光线+构图, 覆盖不同角度/景别`;\n\n// 有 scene_plan 时 sysPrompt 的 (5) 替换\nlet sysPrompt2 = sysPrompt;\nif (sceneCount > 0) {\n  sysPrompt2 = sysPrompt2.replace(/\\(5\\) \\$\\{p\\.num_images\\}张配图的英文prompt[^;]*;/, imgReq);\n}\n\nconst chatBody = {\n  model: 'Qwen3.6-35B-Hauhau',\n  temperature: 0.85,\n  max_tokens: 9000,\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: sysPrompt2 },\n    { role: 'user', content: userPrompt }\n  ]\n};\nreturn [{ json: { chat_body: chatBody, num_images: effNum, scene_plan: scenePlanRaw, cover_indices: coverIdx, tg_chat_id: p.tg_chat_id, tg_bot_token: p.tg_bot_token, drafts_root: p.drafts_root, cover_url: p.cover_url, hot_count: (notes||[]).length }}];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "build-prompt",
+      "name": "Build Hauhau Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8080/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.chat_body) }}",
+        "options": {
+          "timeout": 300000,
+          "retryOnFail": true,
+          "maxTries": 6,
+          "waitBetweenTries": 20000
+        }
+      },
+      "id": "hauhau",
+      "name": "Hauhau",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop-images",
+      "name": "Loop Images",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        140,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst seed = Math.floor(Math.random() * 1000000000);\n// negative 按模式切换: 有标注(scene_plan)时只禁英文/乱码/外国人, 不禁中文标注; 无标注时全禁文字\nconst negNoText = 'text, letters, words, labels, captions, watermark, logo, checklist, table, spreadsheet, printed document, handwriting, typography, signage, tape labels, measurement marks, dimensions, numbers, ruler, scale markings, diagram, schematic, english text, english letters, alphabet, ascii, font, lettering, foreign person, white person, black person, western face';\nconst negLabelMode = item.negative_extra || 'english text, english letters, alphabet, ascii, font, lettering, watermark, logo, foreign person, white person, black person, western face, long paragraphs, sentence, paragraph text';\nconst negativeText = item.scene_plan_used ? negLabelMode : negNoText;\nconst workflow = {\n  '1': {class_type:'UNETLoader', inputs:{unet_name:'qwen_image_fp8_e4m3fn.safetensors', weight_dtype:'default'}},\n  '2': {class_type:'CLIPLoader', inputs:{clip_name:'qwen_2.5_vl_7b_fp8_scaled.safetensors', type:'qwen_image'}},\n  '3': {class_type:'VAELoader', inputs:{vae_name:'qwen_image_vae.safetensors'}},\n  '4': {class_type:'ModelSamplingAuraFlow', inputs:{model:['1',0], shift:3.1}},\n  '5': {class_type:'CLIPTextEncode', inputs:{clip:['2',0], text:item.prompt}},\n  '6': {class_type:'CLIPTextEncode', inputs:{clip:['2',0], text:negativeText}},\n  '7': {class_type:'EmptySD3LatentImage', inputs:{width:1024, height:1024, batch_size:1}},\n  '8': {class_type:'KSampler', inputs:{model:['4',0], positive:['5',0], negative:['6',0], latent_image:['7',0], seed, steps:20, cfg:2.5, sampler_name:'euler', scheduler:'simple', denoise:1.0}},\n  '9': {class_type:'VAEDecode', inputs:{samples:['8',0], vae:['3',0]}},\n  '10': {class_type:'SaveImage', inputs:{images:['9',0], filename_prefix:`n8n-xhs-${item.index}`}}\n};\nreturn [{ json: { comfy_body: { prompt: workflow, client_id: 'n8n' }, ...item }}];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "build-comfy",
+      "name": "Build Comfy Workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8189/prompt",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.comfy_body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "submit-comfy",
+      "name": "Submit Comfy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst http = require('http');\nconst promptId = $input.first().json.prompt_id;\nconst prev = $('Build Comfy Workflow').item.json;\nasync function getJson(url) { return new Promise((res, rej) => http.get(url, r => { let d=''; r.on('data',c=>d+=c); r.on('end',()=>{try{res(JSON.parse(d))}catch(e){rej(e)}}); }).on('error', rej)); }\nasync function getBinary(url) { return new Promise((res, rej) => http.get(url, r => { const c=[]; r.on('data',b=>c.push(b)); r.on('end',()=>res(Buffer.concat(c))); }).on('error', rej)); }\nconst dl = Date.now() + 900000;\nlet result = null;\nwhile (Date.now() < dl) {\n  const d = await getJson(`http://127.0.0.1:8189/history/${promptId}`);\n  if (d[promptId]) {\n    const e = d[promptId], st = e.status || {};\n    if (st.completed) {\n      for (const nid in e.outputs || {}) {\n        for (const img of (e.outputs[nid].images || [])) {\n          const u = `http://127.0.0.1:8189/view?filename=${img.filename}&subfolder=${img.subfolder||''}&type=output`;\n          const buf = await getBinary(u);\n          const dest = `${prev.draft_dir}/img-${String(prev.index).padStart(2,'0')}-${img.filename}`;\n          fs.writeFileSync(dest, buf);\n          result = { saved: dest, filepath: dest };\n          break;\n        }\n        if (result) break;\n      }\n      break;\n    }\n    if (st.status_str === 'error') { result = { error: 'workflow error' }; break; }\n  }\n  await new Promise(r => setTimeout(r, 3000));\n}\nif (!result) result = { error: 'timeout' };\nreturn [{ json: { ...result, ...prev }}];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "poll-save",
+      "name": "Poll + Save",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "keep-first",
+      "name": "Keep First (dedup)",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst dir = $('Keep First (dedup)').item.json.draft_dir;\nconst cover_url = $('Keep First (dedup)').item.json.cover_url || 'http://127.0.0.1:8765/cover';\nconst indices = $('Keep First (dedup)').item.json.cover_indices || [1];\n// 生成封面 (host cover service), 支持多封面: indices=[1,7] → cover-1.png + cover-7.png\nlet coverPaths = [];\ntry {\n  const http = require('http');\n  const payload = JSON.stringify({ draft_dir: dir, sub: '装修干货', indices });\n  const r = await new Promise((res, rej) => {\n    const req = http.request({ host: '127.0.0.1', port: 8765, path: '/cover', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }, timeout: 60000 }, resp => {\n      let d = ''; resp.on('data', c => d += c); resp.on('end', () => { try { res(JSON.parse(d)) } catch(e) { rej(e) } });\n    });\n    req.on('error', rej); req.on('timeout', () => { req.destroy(); rej(new Error('cover timeout')); });\n    req.write(payload); req.end();\n  });\n  coverPaths = (r.cover_paths || []).filter(p => fs.existsSync(p));\n} catch (e) { console.log('cover gen failed:', e.message); }\n\nconst files = fs.readdirSync(dir).filter(f => f.startsWith('img-')).sort();\nconst prev = $('Parse + Save (single)').first().json;\nconst md = fs.readFileSync(`${dir}/note.md`, 'utf8');\nreturn [{ json: { ...prev, draft_dir: dir, images: files, cover_paths: coverPaths, cover_path: coverPaths[0] || '', md_text: md } }];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "prep-tg",
+      "name": "Prep TG + Cover",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $json.tg_bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $json.tg_chat_id }}\",\n  \"text\": {{ JSON.stringify('📝 草稿完成 (基于 ' + $json.hot_count + ' 篇热榜笔记)\\n\\n' + $json.title + '\\n\\n' + $json.body + '\\n\\n' + ($json.tags||[]).map(t=>'#'+t).join(' ') + '\\n\\n📄 完整文件: ' + $json.draft_dir + '/note.md') }},\n  \"reply_markup\": {\n    \"inline_keyboard\": [\n      [{\"text\":\"🔥 好用\",\"callback_data\":\"xhs:{{ $json.draft_id }}:love\"},{\"text\":\"👍 还行\",\"callback_data\":\"xhs:{{ $json.draft_id }}:like\"}],\n      [{\"text\":\"🗑 弃\",\"callback_data\":\"xhs:{{ $json.draft_id }}:discard\"},{\"text\":\"💾 存 seed\",\"callback_data\":\"xhs:{{ $json.draft_id }}:save_seed\"}]\n    ]\n  }\n}",
+        "options": {
+          "proxy": "http://192.168.1.222:7800",
+          "timeout": 30000
+        }
+      },
+      "id": "tg-text",
+      "name": "TG SendMessage (draft + buttons)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n// 跨节点引用: cover_paths/cover_path/images/draft_dir 在 Prep TG + Cover 输出里\nconst p = $('Prep TG + Cover').first().json;\nconst files = [];\n// 所有封面 (支持多封面: cover_paths)\nconst covers = (p.cover_paths || []).filter(cp => fs.existsSync(cp));\nfor (const cp of covers) files.push(cp);\n// 正文图: 跳过被用作封面的配图 (cover_indices)\nconst coverIdx = new Set((p.cover_indices || [1]).map(i => String(i).padStart(2, '0')));\nfor (const f of (p.images || [])) {\n  const m = f.match(/^img-(\\d+)/);\n  const num = m ? m[1] : '';\n  if (num && coverIdx.has(num)) continue;  // 这张已被封面用, 不重复推\n  files.push(`${p.draft_dir}/${f}`);\n}\nreturn files.map((fp, i) => ({\n  json: { filename: fp.split('/').pop(), filepath: fp, tg_chat_id: p.tg_chat_id, tg_bot_token: p.tg_bot_token },\n  binary: { data: { data: fs.readFileSync(fp).toString('base64'), mimeType: 'image/png', fileName: fp.split('/').pop() } }\n}));",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "prep-images",
+      "name": "Prep Images Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop-send",
+      "name": "Loop Send",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1580,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $json.tg_bot_token }}/sendPhoto",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $json.tg_chat_id }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "photo",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "proxy": "http://192.168.1.222:7800",
+          "timeout": 60000
+        }
+      },
+      "id": "tg-photo",
+      "name": "TG SendPhoto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst http = require('http');\nconst raw = $input.first().json.choices[0].message.content;\nlet data = {};\nfor (let i = 0; i < 3; i++) {\n  try { data = JSON.parse(raw); break; } catch (e) { const m = raw.match(/{[\\s\\S]*}/); if (m) raw = m[0]; else throw new Error('bad json from hauhau: ' + raw.slice(0,200)); }\n}\nconst prev = $('Build Hauhau Prompt').item.json;\n\n// 手动解析 url (沙箱无 URL 全局)\nfunction parseUrl(url) {\n  const m = url.match(/^https?:\\/\\/([^:\\/]+)(?::(\\d+))?([^?]*)/);\n  if (!m) throw new Error('bad url: ' + url);\n  return { hostname: m[1], port: m[2] ? parseInt(m[2]) : 80, path: m[3] || '/' };\n}\nfunction post(url, body, timeout) {\n  return new Promise((res, rej) => {\n    const u = parseUrl(url);\n    const payload = JSON.stringify(body);\n    const req = http.request({ hostname: u.hostname, port: u.port, path: u.path, method: 'POST',\n      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }, timeout: timeout||180000 }, r => {\n      let d = ''; r.on('data', c => d += c); r.on('end', () => { try { res(JSON.parse(d)); } catch(e) { rej(e); } });\n    });\n    req.on('error', rej); req.on('timeout', () => { req.destroy(); rej(new Error('timeout')); });\n    req.write(payload); req.end();\n  });\n}\n\nasync function verify(d) {\n  const content = '标题: ' + (d.title||'') + '\\n正文: ' + (d.body||'').slice(0, 900) + '\\n标签: ' + (d.tags||[]).join(' ');\n  const r = await post('http://127.0.0.1:8083/v1/chat/completions', {\n    model: 'Qwen2.5-VL-7B', temperature: 0.1, max_tokens: 80, response_format: { type: 'json_object' },\n    messages: [\n      { role: 'system', content: '你是小红书文案贴合度校验器。判断给定文案是否属于「家居家装/装修干货」垂类且贴合账号「宅有宅的道理」的装修干货定位。若核心是装修/软装/收纳/改造方法, 返回 {\"fit\":true,\"reason\":\"...\"}; 若偏到其他垂类(美妆/母婴/数码/穿搭/美食等), 返回 {\"fit\":false,\"reason\":\"...\"}。严格只返回JSON' },\n      { role: 'user', content }\n    ]\n  });\n  const c = (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '{}';\n  let p = {}; try { p = JSON.parse(c); } catch(e) { const m = c.match(/{[\\s\\S]*}/); if (m) { try { p = JSON.parse(m[0]); } catch(_) {} } }\n  return { fit: p.fit === true, reason: (p.reason || '').slice(0, 200) };\n}\n\nlet v = await verify(data);\nlet retried = false;\nif (!v.fit) {\n  retried = true;\n  const retryPrompt = '上次生成的文案偏离了「家居家装/装修干货」垂类。' + v.reason + '\\n请重新创作一篇严格围绕装修/软装/收纳干货的文案(风格不限, 中古风/奶油风/原木风/现代极简都可以), 保留: 标题15字内带emoji, 正文250-600字短句多段, 8-10个中文tag, ' + prev.num_images + '张配图英文prompt。\\n上次文案(参考不要照抄): 标题=' + (data.title||'') + ' 正文=' + (data.body||'').slice(0,400) + '\\n严格返回JSON {\"title\",\"body\",\"tags\",\"image_prompts\"}';\n  const rr = await post('http://127.0.0.1:8080/v1/chat/completions', {\n    model: 'Qwen3.6-35B-Hauhau', temperature: 0.8, max_tokens: 9000, response_format: { type: 'json_object' },\n    messages: [\n      { role: 'system', content: '你是专业的小红书爆款文案师, 账号「宅有宅的道理」家居装修干货号。严格返回JSON {\"title\",\"body\",\"tags\",\"image_prompts\"}。正文不许出现#开头行, tag只在tags数组。' },\n      { role: 'user', content: retryPrompt }\n    ]\n  }, 180000);\n  const raw2 = (rr.choices && rr.choices[0].message.content) || '';\n  let d2 = {}; for (let i = 0; i < 3; i++) { try { d2 = JSON.parse(raw2); break; } catch(e) { const m = raw2.match(/{[\\s\\S]*}/); if (m) raw2 = m[0]; else break; } }\n  if (d2.title) { data = d2; v = await verify(d2); }\n}\nreturn [{ json: { ...prev, data, fit: v.fit, fit_reason: v.reason, retried } }];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "n-b929b532da05",
+      "name": "B Verify + Auto-Rewrite",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst p = $input.first().json;\nconst d = p.data || {};\nconst body = (d.body || '').split('\\n').filter(l => !/^\\s*#+\\s*[\\u4e00-\\u9fa5]/.test(l)).join('\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\nconst tagsClean = [...new Set((d.tags || []).map(t => t.replace(/^#+/, '').trim()).filter(Boolean))];\nconst ts = new Date().toISOString().slice(0,19).replace(/[-:T]/g,'');\nconst draftDir = `${p.drafts_root}/${ts}`;\nfs.mkdirSync(draftDir, { recursive: true });\nconst md = `# ${d.title}\\n\\n${body}\\n\\n${tagsClean.map(t=>'#'+t).join(' ')}\\n\\n---\\n_基于 ${p.hot_count} 篇热榜笔记提炼生成${p.retried ? ' (自动重写1次)' : ''}_\\n`;\nfs.writeFileSync(`${draftDir}/note.md`, md);\n\n// ===== scene_plan 支持: 有 scene_plan 时配图 prompt 由方案精确构造, 覆盖 hauhau 脑补的 =====\nlet imagePrompts = d.image_prompts || [];\nlet styleTag = 'label-diagram';\nlet negExtra = 'english text, letters, alphabet, ascii, font, lettering, watermark, logo, foreign person, white person, black person, western face';\nlet scenePlanUsed = false;\nlet scenePlan = null;\nif (p.scene_plan && typeof p.scene_plan === 'string') {\n  try { scenePlan = JSON.parse(p.scene_plan); } catch(e) { console.log('scene_plan parse err', e.message); }\n} else if (p.scene_plan && typeof p.scene_plan === 'object') {\n  scenePlan = p.scene_plan;\n}\nif (scenePlan && Array.isArray(scenePlan.images) && scenePlan.images.length > 0) {\n  scenePlanUsed = true;\n  if (scenePlan.style_prefix) {\n    imagePrompts = scenePlan.images.map(img => {\n      const labelStr = (img.labels || []).join('; ');\n      // 标注图: 英文场景 + 中文标注要求\n      return `${scenePlan.style_prefix} ${img.scene} Chinese annotation labels: rectangular white label boxes with thin dark border, connected by thin dashed lines to each device point, text in Chinese short words only (e.g. ${labelStr}), height numbers in cm, labels large clear legible, no other text.`;\n    });\n  } else {\n    imagePrompts = scenePlan.images.map(img => img.scene || '');\n  }\n  if (scenePlan.negative_extra) negExtra = scenePlan.negative_extra;\n  if (scenePlan.style) styleTag = scenePlan.style;\n}\n\nreturn [{ json: {\n  draft_id: ts, draft_dir: draftDir, title: d.title, body: body, tags: tagsClean,\n  image_prompts: imagePrompts, num_images: scenePlanUsed ? imagePrompts.length : p.num_images,\n  scene_plan_used: scenePlanUsed, style_tag: styleTag, negative_extra: negExtra,\n  hot_count: p.hot_count, tg_chat_id: p.tg_chat_id, tg_bot_token: p.tg_bot_token,\n  cover_url: p.cover_url, drafts_root: p.drafts_root, cover_indices: p.cover_indices || [1],\n  fit: p.fit, fit_reason: p.fit_reason, retried: p.retried\n}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "n-c9bca67449ee",
+      "name": "Parse + Save (single)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nconst badge = p.retried ? ' [已自动重写]' : '';\nconst full = '\\n\\n' + p.title + '\\n\\n' + (p.body||'') + '\\n\\n' + (p.tags||[]).map(t=>'#'+t).join(' ');\nreturn [{ json: { ...p,\n  preview_text: '📝 文案草稿' + badge + ' (' + (p.fit ? '通过校验' : '可能偏题') + ')\\n\\n' + p.title + '\\n\\n' + (p.body||'') + '\\n\\n' + (p.tags||[]).map(t=>'#'+t).join(' ') + '\\n\\n📄 完整文件: ' + (p.draft_dir||'') + '/note.md'\n}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "n-500134ce7ba3",
+      "name": "A1 Prep Preview",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        140,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $json.tg_bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $json.tg_chat_id }}\",\n  \"text\": {{ JSON.stringify($json.preview_text) }},\n  \"reply_markup\": {\n    \"inline_keyboard\": [\n      [{\"text\":\"✅ 生图\",\"callback_data\":\"xhsd:{{ $json.draft_id }}:approve\"},{\"text\":\"🔄 重写\",\"callback_data\":\"xhsd:{{ $json.draft_id }}:rewrite\"}]\n    ]\n  }\n}",
+        "options": {
+          "timeout": 30000,
+          "proxy": "http://192.168.1.222:7800"
+        }
+      },
+      "id": "n-2285ef0e2466",
+      "name": "A2 TG Send Preview",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 120,
+        "unit": "seconds"
+      },
+      "id": "n-1ef8a451d04b",
+      "name": "A3 Wait Decision",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        500,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst http = require('http');\n// Wait resume 后 $input 是 {ok, result} 包装, 从 A1 跨节点取真实数据\nconst p = $('A1 Prep Preview').item.json;\nconst decisionPath = `${p.draft_dir}/decision.json`;\nlet action = 'approve';\nlet reason = '';\ntry {\n  if (fs.existsSync(decisionPath)) {\n    const dec = JSON.parse(fs.readFileSync(decisionPath, 'utf8'));\n    action = dec.action || 'approve';\n    reason = dec.reason || '';\n  }\n} catch(e) { console.log('decision read err', e.message); }\n\nlet finalTitle = p.title, finalBody = p.body, finalTags = p.tags, finalPrompts = p.image_prompts || [];\nlet rewrote = false;\nif (action === 'rewrite') {\n  try {\n    const payload = JSON.stringify({\n      model: 'Qwen3.6-35B-Hauhau', temperature: 0.8, max_tokens: 9000, response_format: { type: 'json_object' },\n      messages: [\n        { role: 'system', content: '你是专业的小红书爆款文案师, 账号「宅有宅的道理」家居装修干货号。严格返回JSON {\"title\",\"body\",\"tags\",\"image_prompts\"}。正文不许出现#开头行, tag只在tags数组。' },\n        { role: 'user', content: '用户要求重写这篇文案。' + reason + '\\n请围绕装修/软装/收纳干货重新创作(风格不限), 标题15字内带emoji, 正文250-600字, 8-10个中文tag, ' + p.num_images + '张配图英文prompt。\\n原稿(参考不要照抄): 标题=' + p.title + ' 正文=' + (p.body||'').slice(0,400) + '\\n严格返回JSON {\"title\",\"body\",\"tags\",\"image_prompts\"}' }\n      ]\n    });\n    const rr = await new Promise((res, rej) => {\n      const req = http.request({ hostname: '127.0.0.1', port: 8080, path: '/v1/chat/completions', method: 'POST',\n        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }, timeout: 180000 }, r => {\n        let d = ''; r.on('data', c => d += c); r.on('end', () => { try { res(JSON.parse(d)); } catch(e) { rej(e); } });\n      });\n      req.on('error', rej); req.on('timeout', () => { req.destroy(); rej(new Error('timeout')); });\n      req.write(payload); req.end();\n    });\n    const raw2 = (rr.choices && rr.choices[0].message.content) || '';\n    let d2 = {}; for (let i = 0; i < 3; i++) { try { d2 = JSON.parse(raw2); break; } catch(e) { const m = raw2.match(/{[\\s\\S]*}/); if (m) raw2 = m[0]; else break; } }\n    if (d2.title) {\n      finalTitle = d2.title; finalBody = (d2.body||'').split('\\n').filter(l => !/^\\s*#+\\s*[\\u4e00-\\u9fa5]/.test(l)).join('\\n').replace(/\\n{3,}/g,'\\n\\n').trim();\n      finalTags = [...new Set((d2.tags||[]).map(t=>t.replace(/^#+/,'').trim()).filter(Boolean))];\n      // scene_plan 时配图由方案精确构造, 不用 hauhau 重写生成的\n      let sp = null;\n      try { sp = JSON.parse(p.scene_plan); } catch(e) {}\n      if (sp && Array.isArray(sp.images) && sp.images.length > 0) {\n        finalPrompts = sp.images.map(img => {\n          const labelStr = (img.labels || []).join('; ');\n          return `${sp.style_prefix || ''} ${img.scene} Chinese annotation labels: rectangular white label boxes with thin dark border, connected by thin dashed lines to each device point, text in Chinese short words only (e.g. ${labelStr}), height numbers in cm, labels large clear legible, no other text.`;\n        });\n      } else {\n        finalPrompts = d2.image_prompts || [];\n      }\n      rewrote = true;\n      const md = `# ${finalTitle}\\n\\n${finalBody}\\n\\n${finalTags.map(t=>'#'+t).join(' ')}\\n\\n---\\n_用户要求重写 (${new Date().toISOString().slice(0,19)})_\\n`;\n      fs.writeFileSync(`${p.draft_dir}/note.md`, md);\n    }\n  } catch(e) { console.log('rewrite err', e.message); }\n}\n\nconst n = finalPrompts.length > 0 ? finalPrompts.length : p.num_images;\nconst result = [];\nfor (let i = 0; i < n; i++) {\n  result.push({ json: { prompt: finalPrompts[i] || '', index: i + 1, total: n, draft_dir: p.draft_dir, md_path: `${p.draft_dir}/note.md`, title: finalTitle, body: finalBody, tags: finalTags, hot_count: p.hot_count, tg_chat_id: p.tg_chat_id, tg_bot_token: p.tg_bot_token, cover_url: p.cover_url, draft_id: p.draft_id, decision: action, rewrote, scene_plan_used: !!p.scene_plan, negative_extra: p.negative_extra || '', cover_indices: p.cover_indices || [1] } });\n}\nreturn result;",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "n-1141223fefcf",
+      "name": "A4 Read Decision + Rewrite",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook /xhs-hot": {
+      "main": [
+        [
+          {
+            "node": "Respond 202",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 202": {
+      "main": [
+        [
+          {
+            "node": "Extract Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Params": {
+      "main": [
+        [
+          {
+            "node": "Split Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Links": {
+      "main": [
+        [
+          {
+            "node": "MCP XHS-Downloader (get detail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP XHS-Downloader (get detail)": {
+      "main": [
+        [
+          {
+            "node": "Parse MCP Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse MCP Results": {
+      "main": [
+        [
+          {
+            "node": "Build Hauhau Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Hauhau Prompt": {
+      "main": [
+        [
+          {
+            "node": "Hauhau",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hauhau": {
+      "main": [
+        [
+          {
+            "node": "B Verify + Auto-Rewrite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Images": {
+      "main": [
+        [
+          {
+            "node": "Keep First (dedup)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Comfy Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Comfy Workflow": {
+      "main": [
+        [
+          {
+            "node": "Submit Comfy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Comfy": {
+      "main": [
+        [
+          {
+            "node": "Poll + Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll + Save": {
+      "main": [
+        [
+          {
+            "node": "Loop Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep First (dedup)": {
+      "main": [
+        [
+          {
+            "node": "Prep TG + Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep TG + Cover": {
+      "main": [
+        [
+          {
+            "node": "TG SendMessage (draft + buttons)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG SendMessage (draft + buttons)": {
+      "main": [
+        [
+          {
+            "node": "Prep Images Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Images Binary": {
+      "main": [
+        [
+          {
+            "node": "Loop Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Send": {
+      "main": [
+        [],
+        [
+          {
+            "node": "TG SendPhoto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B Verify + Auto-Rewrite": {
+      "main": [
+        [
+          {
+            "node": "Parse + Save (single)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse + Save (single)": {
+      "main": [
+        [
+          {
+            "node": "A1 Prep Preview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A1 Prep Preview": {
+      "main": [
+        [
+          {
+            "node": "A2 TG Send Preview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A2 TG Send Preview": {
+      "main": [
+        [
+          {
+            "node": "A3 Wait Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A3 Wait Decision": {
+      "main": [
+        [
+          {
+            "node": "A4 Read Decision + Rewrite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A4 Read Decision + Rewrite": {
+      "main": [
+        [
+          {
+            "node": "Loop Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG SendPhoto": {
+      "main": [
+        [
+          {
+            "node": "Loop Send",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "id": "xhs-hot-mcp-v13"
+}

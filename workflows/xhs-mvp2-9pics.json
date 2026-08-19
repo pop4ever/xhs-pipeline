@@ -1,0 +1,134 @@
+{
+  "name": "MVP-2 Xhs Draft 9 Pics",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "theme", "name": "theme", "value": "秋日汉服竹林漫步", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "settheme",
+      "name": "Set Theme",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\nconst dir = '/home/david/xhs-examples';\nlet examples = '';\ntry {\n  const files = fs.readdirSync(dir).filter(f => f.endsWith('.md') && !f.includes('README'));\n  const picks = files.sort(() => Math.random() - 0.5).slice(0, 3);\n  examples = picks.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\\n\\n---\\n\\n');\n} catch(e) { examples = '(no examples yet)'; }\nconst examples_escaped = JSON.stringify(examples).slice(1, -1);\nreturn [{ json: { theme: $input.first().json.theme, examples_joined: examples_escaped } }];"
+      },
+      "id": "readexamples",
+      "name": "Read Examples",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8080/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"Qwen3.6-35B-Hauhau\",\n  \"temperature\": 0.85,\n  \"max_tokens\": 3500,\n  \"response_format\": {\"type\": \"json_object\"},\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"你是专业的小红书爆款文案师。严格遵守: (1) 标题15字内, 带emoji, 有钩子;  (2) 正文250-500字, 短句多段, emoji点缀, 有场景感; (3) 结尾3-5个疑问句或CTA;  (4) 8-10个中文tag; (5) 9张配图的英文prompt, 每张60词内, 描述具体场景+光线+构图, 9张覆盖不同角度/景别 (远景/中景/特写/细节/氛围/俯拍/侧脸/剪影/背影 或对应品类的多角度).\\n\\n**严格禁止**: 正文body里不允许出现以 # 开头的行或裸tag, tag只在返回JSON的tags数组里, 不许在body里重复; 不许把tags再以 ## 双井号形式重复输出.\\n\\n严格返回JSON: {\\\"title\\\":\\\"...\\\", \\\"body\\\":\\\"...\\\", \\\"tags\\\":[\\\"tag1\\\",...共8-10个], \\\"image_prompts\\\":[\\\"en1\\\", ..., \\\"en9\\\"]}\\n\\n参考优秀笔记范例:\\n\\n{{ $json.examples_joined }}\"\n    },\n    {\"role\": \"user\", \"content\": \"主题: {{ $json.theme }}\"}\n  ]\n}",
+        "options": {"timeout": 180000}
+      },
+      "id": "hauhau",
+      "name": "Hauhau",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst raw = $input.first().json.choices[0].message.content;\nconst data = JSON.parse(raw);\n\n// sanitize body: 去掉以 # 开头的行 (裸 tag) 和多余空行\nlet body = (data.body || '').split('\\n')\n  .filter(line => !/^\\s*#+\\s*[\\u4e00-\\u9fa5]/.test(line))\n  .join('\\n')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\n// dedupe + normalize tags (去 ##, 补 #, 去重)\nconst tagsClean = [...new Set((data.tags || []).map(t => t.replace(/^#+/, '').trim()).filter(Boolean))];\n\nconst ts = new Date().toISOString().replace(/[-:T]/g,'').substring(0,15);\nconst draftDir = `/home/david/xhs-drafts/${ts}`;\nfs.mkdirSync(draftDir, { recursive: true });\nconst mdPath = `${draftDir}/note.md`;\nconst md = `# ${data.title}\\n\\n${body}\\n\\n${tagsClean.map(t=>'#'+t).join(' ')}\\n`;\nfs.writeFileSync(mdPath, md);\n\nconst prompts = data.image_prompts || [];\nconst result = [];\nfor (let i = 0; i < Math.min(9, prompts.length); i++) {\n  result.push({ json: {\n    prompt: prompts[i],\n    index: i + 1,\n    draft_dir: draftDir,\n    md_path: mdPath,\n    title: data.title,\n    total: Math.min(9, prompts.length)\n  }});\n}\nreturn result;"
+      },
+      "id": "parsesplit",
+      "name": "Parse + Save MD + Split 9",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {"batchSize": 1, "options": {}},
+      "id": "loop",
+      "name": "Loop 1-by-1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst seed = Math.floor(Math.random() * 1000000000);\nconst workflow = {\n  '1': {class_type:'UNETLoader', inputs:{unet_name:'qwen_image_fp8_e4m3fn.safetensors', weight_dtype:'default'}},\n  '2': {class_type:'CLIPLoader', inputs:{clip_name:'qwen_2.5_vl_7b_fp8_scaled.safetensors', type:'qwen_image'}},\n  '3': {class_type:'VAELoader', inputs:{vae_name:'qwen_image_vae.safetensors'}},\n  '4': {class_type:'ModelSamplingAuraFlow', inputs:{model:['1',0], shift:3.1}},\n  '5': {class_type:'CLIPTextEncode', inputs:{clip:['2',0], text:item.prompt}},\n  '6': {class_type:'CLIPTextEncode', inputs:{clip:['2',0], text:''}},\n  '7': {class_type:'EmptySD3LatentImage', inputs:{width:1024, height:1024, batch_size:1}},\n  '8': {class_type:'KSampler', inputs:{model:['4',0], positive:['5',0], negative:['6',0], latent_image:['7',0], seed, steps:20, cfg:2.5, sampler_name:'euler', scheduler:'simple', denoise:1.0}},\n  '9': {class_type:'VAEDecode', inputs:{samples:['8',0], vae:['3',0]}},\n  '10': {class_type:'SaveImage', inputs:{images:['9',0], filename_prefix:`n8n-xhs-${item.index}`}}\n};\nreturn [{ json: {\n  comfy_body: { prompt: workflow, client_id: 'n8n' },\n  index: item.index,\n  draft_dir: item.draft_dir,\n  md_path: item.md_path,\n  title: item.title\n}}];"
+      },
+      "id": "buildwf",
+      "name": "Build Comfy Workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8189/prompt",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.comfy_body) }}",
+        "options": {"timeout": 30000}
+      },
+      "id": "submit",
+      "name": "Submit to Mutex Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst http = require('http');\n\nconst promptId = $input.first().json.prompt_id;\nconst prev = $('Build Comfy Workflow').item.json;\nconst draftDir = prev.draft_dir;\nconst index = prev.index;\n\nasync function getJson(url) {\n  return new Promise((resolve, reject) => {\n    http.get(url, res => {\n      let d = ''; res.on('data', c => d += c);\n      res.on('end', () => resolve(JSON.parse(d)));\n    }).on('error', reject);\n  });\n}\nasync function getBinary(url) {\n  return new Promise((resolve, reject) => {\n    http.get(url, res => {\n      const chunks = [];\n      res.on('data', c => chunks.push(c));\n      res.on('end', () => resolve(Buffer.concat(chunks)));\n    }).on('error', reject);\n  });\n}\n\nconst deadline = Date.now() + 900000;\nlet result = null;\nwhile (Date.now() < deadline) {\n  const d = await getJson(`http://127.0.0.1:8189/history/${promptId}`);\n  if (d[promptId]) {\n    const entry = d[promptId];\n    const st = entry.status || {};\n    if (st.completed) {\n      const outputs = entry.outputs || {};\n      for (const nodeId in outputs) {\n        for (const img of (outputs[nodeId].images || [])) {\n          const url = `http://127.0.0.1:8189/view?filename=${img.filename}&subfolder=${img.subfolder||''}&type=output`;\n          const buf = await getBinary(url);\n          const dest = `${draftDir}/img-${String(index).padStart(2,'0')}-${img.filename}`;\n          fs.writeFileSync(dest, buf);\n          result = { saved: dest, size: buf.length };\n          break;\n        }\n        if (result) break;\n      }\n      break;\n    }\n    if (st.status_str === 'error') { result = { error: 'workflow error', entry }; break; }\n  }\n  await new Promise(r => setTimeout(r, 3000));\n}\nif (!result) result = { error: 'timeout after 15min' };\nreturn [{ json: { ...result, index, draft_dir: draftDir } }];"
+      },
+      "id": "poll",
+      "name": "Poll + Save Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\nconst all = $input.all();\nconst draftDir = all[0].json.draft_dir;\nconst files = fs.readdirSync(draftDir);\nconst images = files.filter(f => f.startsWith('img-')).sort();\nconst mdPath = path.join(draftDir, 'note.md');\nlet md = fs.readFileSync(mdPath, 'utf8');\nmd += '\\n\\n---\\n\\n## 图片\\n\\n' + images.map(f => `![${f}](${f})`).join('\\n\\n');\nfs.writeFileSync(mdPath, md);\n\nreturn [{ json: {\n  draft_dir: draftDir,\n  md_path: mdPath,\n  images_count: images.length,\n  images: images,\n  hint: `SSH mini: ls ${draftDir}`\n}}];"
+      },
+      "id": "assemble",
+      "name": "Assemble Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1740, 420]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {"main": [[{"node": "Set Theme", "type": "main", "index": 0}]]},
+    "Set Theme": {"main": [[{"node": "Read Examples", "type": "main", "index": 0}]]},
+    "Read Examples": {"main": [[{"node": "Hauhau", "type": "main", "index": 0}]]},
+    "Hauhau": {"main": [[{"node": "Parse + Save MD + Split 9", "type": "main", "index": 0}]]},
+    "Parse + Save MD + Split 9": {"main": [[{"node": "Loop 1-by-1", "type": "main", "index": 0}]]},
+    "Loop 1-by-1": {
+      "main": [
+        [{"node": "Assemble Draft", "type": "main", "index": 0}],
+        [{"node": "Build Comfy Workflow", "type": "main", "index": 0}]
+      ]
+    },
+    "Build Comfy Workflow": {"main": [[{"node": "Submit to Mutex Proxy", "type": "main", "index": 0}]]},
+    "Submit to Mutex Proxy": {"main": [[{"node": "Poll + Save Image", "type": "main", "index": 0}]]},
+    "Poll + Save Image": {"main": [[{"node": "Loop 1-by-1", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "pinData": {}
+}
