@@ -6,13 +6,21 @@
 
 ```
 xhs-pipeline/
-├── workflows/        # n8n workflow JSON 导出(各版本)
+├── workflows/        # n8n workflow JSON 导出(图文,各版本)
 │   ├── xhs-mvp2-9pics.json       # MVP-2 9图版
 │   ├── xhs-mvp3-v2/v2.1.json     # MVP-3
 │   ├── xhs-mvp4-v3.0.json        # MVP-4 v3.0
 │   ├── xhs-hot-mcp-v1/v12/v13    # XHS-Hot MCP 管线 v1/v1.2/v1.3
 │   ├── xhs-wf1-import*.json      # WF1 导入
 │   └── xhs-wf3-feedback.json     # WF3 反馈
+├── workflows-video/   # n8n workflow JSON 导出(视频, H3)
+│   ├── h3-video-gen*.json        # H3 视频生成(原版/updated/export)
+│   ├── h3-nightly-batch.json     # H3 夜间批量
+│   └── h3-prompts.json           # H3 prompt 配置
+├── h3-workflows/      # H3 ComfyUI 视频工作流 JSON
+│   ├── h3_t2v_480p/720p*.json    # 文生视频(480p/720p 多变体)
+│   ├── h3_ref2va*.json           # 参考图生视频
+│   └── f5_material*.json         # F5 配音素材
 ├── scene_plans/      # 场景方案配置(scene_plan,JSON 驱动配图)
 │   └── scene_plan_xiaomi_smart.json   # 小米全屋智能 7 图
 ├── scripts/          # 辅助脚本

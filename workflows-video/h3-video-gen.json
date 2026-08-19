@@ -1,0 +1,219 @@
+{
+  "name": "h3-video-gen (MiniMax H3 T2V via ComfyUI)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "h3/video-gen",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "416e7b2a-50ec-4349-be56-c30192cdd49d",
+      "name": "Webhook /h3/video-gen",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        0
+      ],
+      "webhookId": "h3-video-gen"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\"status\":\"accepted\",\"prompt\":$json.body.prompt||\"\"}) }}",
+        "options": {}
+      },
+      "id": "7108d521-5582-4b56-8ec2-1489c3285a81",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prompt",
+              "name": "prompt",
+              "value": "={{ $('Webhook /h3/video-gen').item.json.body.prompt }}",
+              "type": "string"
+            },
+            {
+              "id": "width",
+              "name": "width",
+              "value": "={{ $('Webhook /h3/video-gen').item.json.body.width || 864 }}",
+              "type": "number"
+            },
+            {
+              "id": "height",
+              "name": "height",
+              "value": "={{ $('Webhook /h3/video-gen').item.json.body.height || 480 }}",
+              "type": "number"
+            },
+            {
+              "id": "length",
+              "name": "length",
+              "value": "={{ $('Webhook /h3/video-gen').item.json.body.length || 124 }}",
+              "type": "number"
+            },
+            {
+              "id": "steps",
+              "name": "steps",
+              "value": "={{ $('Webhook /h3/video-gen').item.json.body.steps || 8 }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "5b110a32-10b6-4b2f-a95a-1fec661152fb",
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst seed = Math.floor(Math.random() * 1000000000);\n// 分辨率防护:mini-ai-svr (Strix Halo) 上 RDNA35 加速节点只支持 T<=16500\n// 720p(1280x736, 124帧)估算 T~29k -> 原生路径会 OOM 崩溃(2026-08-16 实测)\nconst latFrames = Math.ceil(item.length / 4) + 1;\nconst tokensPerFrame = Math.round(item.width / 32) * Math.round(item.height / 32);\nconst estT = latFrames * tokensPerFrame + 2000;\nif (estT > 16000) {\n  throw new Error('分辨率超限(估算T~' + estT + ' > 16500):当前机器甜点区为 480p(864x480, <=5s)。720p 不可行(RDNA35 节点上限 T<=16500,原生路径实测崩溃)。请降低 width/height 或 length。');\n}\nconst workflow = {\n  '1': {class_type:'UnetLoaderGGUF', inputs:{unet_name:'MiniMax-H3-FL2VA-Pruned-Q8_0.gguf', weight_dtype:'default'}},\n  '2': {class_type:'CLIPLoader', inputs:{clip_name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors', type:'minimax'}},\n  '3': {class_type:'VAELoader', inputs:{vae_name:'minimax_h3_video_vae_fp16.safetensors'}},\n  '4': {class_type:'MiniMaxH3ImageToVideo', inputs:{clip:['2',0], vae:['3',0], prompt:item.prompt, width:item.width, height:item.height, length:item.length}},\n  '5': {class_type:'CLIPTextEncode', inputs:{clip:['2',0], text:''}},\n  '6': {class_type:'MiniMaxH3SigmaShift', inputs:{model:['12',0], shift_video:12.0, shift_audio:3.0}},\n  '7': {class_type:'KSampler', inputs:{model:['6',0], positive:['4',0], negative:['5',0], latent_image:['4',1], seed, steps:item.steps, cfg:1.0, sampler_name:'er_sde', scheduler:'simple', denoise:1.0}},\n  '8': {class_type:'VAEDecode', inputs:{samples:['7',0], vae:['3',0]}},\n  '9': {class_type:'CreateVideo', inputs:{images:['8',0], fps:24.0}},\n  '10': {class_type:'SaveVideo', inputs:{video:['9',0], filename_prefix:'h3_video', format:'mp4', codec:'auto'}},\n  '11': {class_type:'RDNA35PatchMiniMaxH3GFX1151Attention', inputs:{model:['1',0], enabled:true, verbose_fallbacks:true}},\n  '12': {class_type:'LoraLoaderModelOnly', inputs:{model:['11',0], lora_name:'minimax_h3_lightx2v_turbo_8step.safetensors', strength_model:1.0}}\n};\nreturn [{ json: { comfy_body: { prompt: workflow, client_id: 'n8n-h3' }, ...item }}];"
+      },
+      "id": "07737575-3d48-4b12-b632-a137e75c6242",
+      "name": "Build H3 Workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8189/prompt",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.comfy_body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "9db6438e-53c8-4ad5-aa10-aa920c22ca8e",
+      "name": "Submit Comfy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst http = require('http');\nconst promptId = $input.first().json.prompt_id;\nconst prev = $('Build H3 Workflow').item.json;\nfunction getJson(url) { return new Promise((res, rej) => http.get(url, r => { let d=''; r.on('data',c=>d+=c); r.on('end',()=>{try{res(JSON.parse(d))}catch(e){rej(e)}}); }).on('error', rej)); }\nfunction getBinary(url) { return new Promise((res, rej) => http.get(url, r => { const c=[]; r.on('data',b=>c.push(b)); r.on('end',()=>res(Buffer.concat(c))); }).on('error', rej)); }\nasync function withRetry(fn, url, tries) { for (let i=0;i<tries;i++){ try { return await fn(url); } catch(e){ if(i===tries-1) throw e; await new Promise(r=>setTimeout(r,2500*(i+1))); } } }\nconst dl = Date.now() + 1500000; // 25min cap (mutex proxy allows 120min)\nlet result = null;\nwhile (Date.now() < dl) {\n  try {\n    const d = await withRetry(getJson, `http://127.0.0.1:8189/history/${promptId}`, 4);\n    if (d[promptId]) {\n      const e = d[promptId], st = e.status || {};\n      if (st.completed) {\n        for (const nid in e.outputs || {}) {\n          const vids = e.outputs[nid].videos || e.outputs[nid].images || [];\n          for (const v of vids) {\n            const u = `http://127.0.0.1:8189/view?filename=${v.filename}&subfolder=${v.subfolder||''}&type=output`;\n            const buf = await withRetry(getBinary, u, 4);\n            const dir = '/home/node/.n8n/h3-videos';\n            fs.mkdirSync(dir, {recursive:true});\n            const dest = `${dir}/${v.filename}`;\n            fs.writeFileSync(dest, buf);\n            result = { saved: dest, filename: v.filename };\n            break;\n          }\n          if (result) break;\n        }\n        break;\n      }\n      if (st.status_str === 'error') { result = { error: 'workflow error' }; break; }\n    }\n  } catch(e) { result = { error: 'poll-fail: ' + e.message }; break; }\n  await new Promise(r => setTimeout(r, 3000));\n}\nif (!result) result = { error: 'timeout' };\nreturn [{ json: { ...result, ...prev }}];"
+      },
+      "id": "b7241f3d-63b9-4055-8520-b739cb5320f5",
+      "name": "Poll Video + Save",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "45f1def7-438d-4ec4-a05e-5b6487894333",
+      "name": "Respond Done",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        420,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook /h3/video-gen": {
+      "main": [
+        [
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Accepted": {
+      "main": [
+        [
+          {
+            "node": "Extract Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Params": {
+      "main": [
+        [
+          {
+            "node": "Build H3 Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build H3 Workflow": {
+      "main": [
+        [
+          {
+            "node": "Submit Comfy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Comfy": {
+      "main": [
+        [
+          {
+            "node": "Poll Video + Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Video + Save": {
+      "main": [
+        [
+          {
+            "node": "Respond Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "meta": {},
+  "id": "cf78eda8-023b-46d5-94da-c359f29c9cb0"
+}

@@ -1,0 +1,24 @@
+{
+ "2": {
+  "class_type": "F5TTSAudio",
+  "inputs": {
+   "sample": "f5-ref-cn.wav",
+   "speech": "清晨的阳光洒进庭院,微风轻轻拂过,桃花瓣缓缓飘落,温柔的时光静静流淌。",
+   "seed": 42,
+   "model": "F5",
+   "vocoder": "auto",
+   "speed": 1.0,
+   "model_type": "F5TTS_Base"
+  }
+ },
+ "3": {
+  "class_type": "SaveAudio",
+  "inputs": {
+   "filename_prefix": "f5_ref_material",
+   "audio": [
+    "2",
+    0
+   ]
+  }
+ }
+}

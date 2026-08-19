@@ -1,0 +1,1 @@
+{"2": {"class_type": "F5TTSAudio", "inputs": {"sample": "f5-ref-cn.wav", "speech": "院墙边的桃花开了,花瓣随风落在石阶上,远处的屋檐挂着风铃,叮咚声轻轻回荡,时光安静美好。", "seed": 42, "model": "F5", "vocoder": "auto", "speed": 1.0, "model_type": "F5TTS_Base"}}, "3": {"class_type": "SaveAudio", "inputs": {"filename_prefix": "f5_ref_material2", "audio": ["2", 0]}}}

@@ -1,0 +1,133 @@
+{
+ "1": {
+  "class_type": "UnetLoaderGGUF",
+  "inputs": {
+   "unet_name": "MiniMax-H3-FL2VA-Pruned-Q8_0.gguf",
+   "weight_dtype": "default"
+  }
+ },
+ "2": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+   "type": "minimax"
+  }
+ },
+ "3": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+  }
+ },
+ "4": {
+  "class_type": "MiniMaxH3ImageToVideo",
+  "inputs": {
+   "clip": [
+    "2",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "prompt": "A red fox jumping over a log in a snowy forest, golden hour light, slow motion, cinematic, photorealistic",
+   "width": 864,
+   "height": 480,
+   "length": 124
+  }
+ },
+ "5": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "clip": [
+    "2",
+    0
+   ],
+   "text": ""
+  }
+ },
+ "6": {
+  "class_type": "MiniMaxH3SigmaShift",
+  "inputs": {
+   "model": [
+    "11",
+    0
+   ],
+   "shift_video": 12.0,
+   "shift_audio": 3.0
+  }
+ },
+ "7": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "6",
+    0
+   ],
+   "positive": [
+    "4",
+    0
+   ],
+   "negative": [
+    "5",
+    0
+   ],
+   "latent_image": [
+    "4",
+    1
+   ],
+   "seed": 42,
+   "steps": 20,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1.0
+  }
+ },
+ "8": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "7",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  }
+ },
+ "9": {
+  "class_type": "CreateVideo",
+  "inputs": {
+   "images": [
+    "8",
+    0
+   ],
+   "fps": 24.0
+  }
+ },
+ "10": {
+  "class_type": "SaveVideo",
+  "inputs": {
+   "video": [
+    "9",
+    0
+   ],
+   "filename_prefix": "h3_t2v_480p",
+   "format": "mp4",
+   "codec": "auto"
+  }
+ },
+ "11": {
+  "class_type": "RDNA35PatchMiniMaxH3GFX1151Attention",
+  "inputs": {
+   "model": [
+    "1",
+    0
+   ],
+   "enabled": true,
+   "verbose_fallbacks": true
+  }
+ }
+}
