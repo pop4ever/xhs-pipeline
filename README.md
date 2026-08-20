@@ -15,15 +15,19 @@ xhs-pipeline/
 │   └── xhs-wf3-feedback.json     # WF3 反馈
 ├── workflows-video/   # n8n workflow JSON 导出(视频, H3)
 │   ├── h3-video-gen*.json        # H3 视频生成(原版/updated/export)
+│   ├── h3-video-gen-v2-edgeTTS-clean.json  # ⚠️ 生产现役 v2(EdgeTTS 云希男声, webhook /h3/video-gen2)
 │   ├── h3-nightly-batch.json     # H3 夜间批量
-│   └── h3-prompts.json           # H3 prompt 配置
+│   └── h3-prompts.json           # H3 prompt 配置(01篇9段v4 / 02篇6段v2 真实 storyboard)
 ├── h3-workflows/      # H3 ComfyUI 视频工作流 JSON
 │   ├── h3_t2v_480p/720p*.json    # 文生视频(480p/720p 多变体)
 │   ├── h3_ref2va*.json           # 参考图生视频
 │   └── f5_material*.json         # F5 配音素材
 ├── scene_plans/      # 场景方案配置(scene_plan,JSON 驱动配图)
 │   └── scene_plan_xiaomi_smart.json   # 小米全屋智能 7 图
-├── scripts/          # 辅助脚本
+├── scripts/
+│   ├── h3-video/                 # H3 生产脚本集(2026-08-20)
+│   │   ├── audio-align-remux.sh  # 音轨对齐 v4: 本地 edge-tts -10% 重合成 + 逐段裁切(语音+0.5s)
+│   │   └── README.md             # 轮询顺序铁律(BASE先查再POST) + 部署事实 + 坑
 │   ├── cover_gen.py       # 封面生成(v4: 单图/双封面)
 │   ├── cover_server.py    # 封面 HTTP 服务(:8765)
 │   └── xhs-batch-runner.py# 批量测试脚本

@@ -1,4 +1,147 @@
-[
-  {"prompt": "A cup of pour-over coffee being brewed in morning sunlight, steam rising, cozy cafe ambiance, cinematic close-up", "width": 864, "height": 480, "length": 124, "steps": 8},
-  {"prompt": "A lighthouse on a cliff at sunset, waves crashing, seagulls flying, cinematic aerial shot, photorealistic"}
-]
+{
+ "meta": {
+  "updated": "2026-08-20",
+  "voice": "zh-CN-YunxiNeural (rate 0 部署 + -10% 本地 remux)",
+  "res": "480x864, length=124 (~5.17s/seg), steps=8",
+  "notes": "01篇=9段45s男声v4; 02篇=6段30s男声v2. 设备防脑补内置 no round wall lamp"
+ },
+ "xiaomi-smart-01-v4": [
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A wide living room of a modern smart home: the light beige wall with white smart panels and sockets, warm smart light strips glowing softly on the ceiling, a small smart speaker on the shelf, a floor lamp, cozy high-end atmosphere, real photo, cinematic. One continuous shot without cuts: the camera slowly pushes from the wide living-room view toward the wall panel detail, ending on a close view of the smart panel. no people, no hands, no dialogue, no text, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "小米全屋智能,装完一年真实账本,值不值?",
+   "seg": "01-hook-v3"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A modern entryway of a smart home: a white smart door lock on the door, a smart switch panel on the wall, a motion sensor in the wall corner, a shoe cabinet below, warm soft light, real photo, cinematic. One continuous shot without cuts: the camera slowly pushes in from the entryway entrance toward the door and wall, establishing the whole space. no people, no hands, no dialogue, no text, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "入门3500,玄关智能从门锁感应开始",
+   "seg": "02-entry-scene-v3"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A close tracking view along a modern entryway wall of a smart home: the white smart door lock, then a smart switch panel, then a motion sensor near the ceiling, warm soft light, real photo, cinematic. One continuous shot without cuts: the camera trucks sideways along the wall, passing the door lock, then the switch panel, then the motion sensor, ending near the ceiling sensor. no people, no hands, no dialogue, no text, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "网关开关门锁传感器,四大件一次装齐",
+   "seg": "03-entry-pts-v3"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A modern bedroom of a smart home: floor-to-ceiling curtains slowly opening on a motorized curtain rail, a wall-mounted smart control panel glowing softly, a bedside table, warm cozy light, real photo, cinematic. One continuous shot without cuts: the camera slowly pushes in from the wide bedroom toward the window, curtains opening as it advances. no people, no hands, no dialogue, no text, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "进阶7500,卧室电动窗帘优先安排",
+   "seg": "04-bedroom-scene-v3"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A tracking view along the wall of a modern smart-home bedroom: the motorized curtain rail above, a square white touchscreen smart control panel mounted at switch height, a bedside table with smart socket, warm cozy light, real photo, cinematic. One continuous shot without cuts: the camera trucks along the wall from the curtain rail past the square touchscreen panel to the bedside socket. no people, no hands, no dialogue, no text, no watermark, no logo, no round wall lamp, no ceiling lamp.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "卧室中控屏加安防,睡觉出门都更省心",
+   "seg": "05-bedroom-pts-v4"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A bright modern kitchen of a smart home: white cabinets, smart appliances, a small smart speaker, lights slowly dimming and warming as evening falls, high-end feel, real photo, cinematic. One continuous shot without cuts: the camera slowly pushes in from the kitchen doorway across the counter, lights warming as it moves. no people, no hands, no dialogue, no text, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "顶配14000,厨房灯光全屋联动起来",
+   "seg": "06-kitchen-scene-v3"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A close view along a modern smart-home kitchen counter: smart appliances on the white countertop, warm under-cabinet light strips glowing, a small smart speaker, evening ambience, real photo, cinematic. One continuous shot without cuts: the camera pans slowly along the counter, warm under-cabinet lights following the move. no people, no hands, no dialogue, no text, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "灯光场景自动切换,下厨氛围直接拉满",
+   "seg": "07-kitchen-pts-v3"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A top-down view of a light beige apartment floor plan on a clean background, rooms softly glowing in warm light, neat blueprint-like diagram, real photo, cinematic. One continuous shot without cuts: the camera slowly zooms out from the central living room to reveal the whole floor plan. no people, no hands, no dialogue, no text, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "预算可高可低,先规划好全部需求再动工",
+   "seg": "08-plan-v3"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo realism, white and beige walls, light wood floor, soft natural daylight, clean and tidy. A close-up of a stylish smart ceiling light turning on with warm light, subtle bokeh, night warm ambience, elegant, real photo, cinematic. One continuous shot without cuts: the camera holds steady on the light while slowly pulling focus, warm glow filling the frame. no people, no hands, no dialogue, no text, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "关注我,下期讲零线这个大坑,别踩坑",
+   "seg": "09-cta-v3"
+  }
+ ],
+ "xiaomi-smart-02-v2": [
+  {
+   "prompt": "Light minimalist interior, real photo style, white and beige walls, light wood floor, soft natural daylight. A close view of a smart switch on a construction wall: the back panel is open showing messy wires - the smart-home switch must have a zero wire missing! warm cozy lighting, cinematic. One continuous shot without cuts, no people, no hands, no watermark, no logo.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "智能开关最怕的坑就是没留零线",
+   "seg": "02-01-hook"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo style, white and beige walls, light wood floor, soft natural daylight. Two smart switch panels side by side on the same white wall: the left panel with two neat wires labeled L and N, the right compact single-wire panel, clean and tidy, real product texture, warm cozy light, cinematic. One continuous shot without cuts: the camera pans slowly from the left panel to the right panel. no people, no hands, no text, no watermark, no logo, no round wall lamp, no glowing device.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "零火版开关有独立零线,供电稳灯不会闪",
+   "seg": "02-02-compare"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo style, white and beige walls, light wood floor, soft natural daylight. Macro close-up of a bright LED bulb glowing weakly and flickering slightly, connected to a tiny single-fire switch module on the wall, delicate wires, warm cozy light, cinematic, real photo. One continuous shot without cuts: the camera slowly pushes in on the flickering bulb. no people, no hands, no dialogue, no text, no watermark, no logo, no round wall lamp, no strange device.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "单火版没零线只能靠偷电,LED灯极易闪",
+   "seg": "02-03-flicker"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo style, white and beige walls, light wood floor. A white empty 86mm wiring box recessed in a rough plaster wall with three loose wires inside: red, blue and yellow, the yellow wire clearly the neutral, clean construction site, warm cozy light, real photo, cinematic. One continuous shot without cuts: the camera slowly pushes in on the wiring box. no people, no hands, no text, no watermark, no logo, no strange device.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "电工进场前交代师傅,每个底盒都留好零线",
+   "seg": "02-04-box"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo style, clean light wood table top. Three smart switch solutions laid out side by side: the left a full zero-wire switch with neat wires, the middle a compact adapter module, the right a bright larger LED bulb, product display style, warm cozy light, real photo, cinematic. One continuous shot without cuts: the camera pans slowly across the three items from left to right. no people, no hands, no text, no watermark, no logo, no strange device.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "已经装了单火版,就加个适配器最省事",
+   "seg": "02-05-solutions"
+  },
+  {
+   "prompt": "Light minimalist interior, real photo style, white and beige walls, light wood floor, warm evening light. A neat row of white power sockets on a living room wall near the TV, tidy wiring, soft cozy light, real photo, cinematic. One continuous shot without cuts: the camera slowly pushes in on the socket row. no people, no dialogue, no text, no watermark, no logo, no strange device.",
+   "width": 480,
+   "height": 864,
+   "length": 124,
+   "steps": 8,
+   "voice_text": "关注我,下期讲七个空间的插座布置",
+   "seg": "02-06-cta"
+  }
+ ]
+}
