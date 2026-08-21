@@ -1,0 +1,30 @@
+{
+  "style_prefix": "Light minimalist interior, real photo realism, no people, no hands, white and beige walls, light wood floor, soft natural daylight, clean and tidy.",
+  "negative_extra": "english text, english letters, alphabet, ascii, font, lettering, watermark, logo, foreign person, white person, black person, western face, long paragraphs, sentence, paragraph text",
+  "images": [
+    {
+      "scene": "A modern living room with a motorized curtain rail above a large window, floor-to-ceiling curtains half open, warm morning light.",
+      "labels": ["智能窗帘", "电机 220cm", "窗帘盒 预留"]
+    },
+    {
+      "scene": "A warm living room at evening with smart ceiling light glowing softly, scene switching mood, cozy.",
+      "labels": ["灯光场景", "会客/观影/晚安", "色温 2700-6500K"]
+    },
+    {
+      "scene": "A kitchen with warm under-cabinet light strips glowing, smart speaker on counter, evening cooking mood.",
+      "labels": ["厨房 橱柜灯带", "下厨自动亮", "回家场景"]
+    },
+    {
+      "scene": "A bedside table with a small smart night light, warm cozy glow, clean minimal bedroom.",
+      "labels": ["卧室 夜灯", "起床感应", "凌晨微光"]
+    },
+    {
+      "scene": "A top-down view of a light apartment floor plan with light and curtain positions marked in yellow, diagram style.",
+      "labels": ["客厅 主灯+灯带", "卧室 夜灯", "窗帘 客厅/主卧", "厨房 橱柜灯"]
+    },
+    {
+      "scene": "A white curtain motor mounted above a window with a neat rail, close-up product display, construction stage.",
+      "labels": ["电机 轨道", "220cm 高", "留插座 窗帘盒"]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "style_prefix": "Light minimalist interior, real photo realism, no people, no hands, white and beige walls, light wood floor, soft natural daylight, clean and tidy.",
+  "negative_extra": "english text, english letters, alphabet, ascii, font, lettering, watermark, logo, foreign person, white person, black person, western face, long paragraphs, sentence, paragraph text",
+  "images": [
+    {
+      "scene": "A white smart switch panel mounted on a wall at hand height, clean minimal room background, product display style.",
+      "labels": ["智能开关 零火版", "离地 130cm", "69 起"]
+    },
+    {
+      "scene": "A small round white presence sensor mounted at the top corner of a wall, subtle, clean minimal room.",
+      "labels": ["人体传感器", "毫米波", "顶角 200cm"]
+    },
+    {
+      "scene": "A white contact sensor on a window frame, small and neat, close-up, clean minimal.",
+      "labels": ["门窗传感器", "窗框", "开合提醒"]
+    },
+    {
+      "scene": "A white smart camera on a shelf facing a room, clean and modern, subtle design.",
+      "labels": ["智能摄像头", "全景 360", "夜视"]
+    },
+    {
+      "scene": "A white smart hub device plugged near a router, small compact, clean.",
+      "labels": ["中枢网关", "本地执行", "断网可用"]
+    },
+    {
+      "scene": "A top-down view of a light apartment floor plan with sensor positions marked in green and switch positions in orange, diagram style.",
+      "labels": ["开关 每房1-2", "传感 顶角", "窗帘电机 窗侧", "摄像头 玄关/客厅"]
+    }
+  ]
+}

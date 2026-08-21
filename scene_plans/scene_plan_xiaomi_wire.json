@@ -1,0 +1,30 @@
+{
+  "style_prefix": "Light minimalist interior, real photo realism, no people, no hands, white and beige walls, light wood floor, soft natural daylight, clean and tidy.",
+  "negative_extra": "english text, english letters, alphabet, ascii, font, lettering, watermark, logo, foreign person, white person, black person, western face, long paragraphs, sentence, paragraph text",
+  "images": [
+    {
+      "scene": "A clean construction wall with two rows of electrical wires clearly separated: strong current and weak current wires running in separate conduit pipes with visible distance, pre-plaster stage, clean workmanship.",
+      "labels": ["强电 220V", "弱电 网线", "相隔 30cm", "避免干扰"]
+    },
+    {
+      "scene": "A white modern junction box on a wall with red, blue and yellow wires neatly labeled, pre-plaster construction, clean.",
+      "labels": ["零线 蓝", "火线 红", "地线 黄绿", "86底盒 加深"]
+    },
+    {
+      "scene": "A rolled bundle of blue Cat6 network cable on a white table, close-up, product display.",
+      "labels": ["超六类网线", "千兆起步", "8芯全通"]
+    },
+    {
+      "scene": "A modern living room wall with multiple sockets and a network port plate side by side, clean and tidy, neat white panels.",
+      "labels": ["网口+插座", "每点 30-50cm 余量", "电视墙 2网口"]
+    },
+    {
+      "scene": "A white distribution box open on a wall showing tidy wiring of network cables, fiber, and a small router, construction stage.",
+      "labels": ["弱电箱 40x30x20", "进光纤", "出网线", "留零线"]
+    },
+    {
+      "scene": "A top-down view of a light apartment floor plan with conduit paths marked, wiring routing diagram style.",
+      "labels": ["全屋穿线路径", "强弱分离", "每房间 有线回程"]
+    }
+  ]
+}

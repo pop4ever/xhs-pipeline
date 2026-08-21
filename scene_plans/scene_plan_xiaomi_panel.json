@@ -1,0 +1,30 @@
+{
+  "style_prefix": "Light minimalist interior, real photo realism, no people, no hands, white and beige walls, light wood floor, soft natural daylight, clean and tidy.",
+  "negative_extra": "english text, english letters, alphabet, ascii, font, lettering, watermark, logo, foreign person, white person, black person, western face, long paragraphs, sentence, paragraph text",
+  "images": [
+    {
+      "scene": "A square white touchscreen smart control panel mounted on a wall at switch height, clean minimal living room, no decorative round lamps.",
+      "labels": ["中控屏", "方形壁挂", "离地 150cm"]
+    },
+    {
+      "scene": "A wall-mounted square white touchscreen showing a smart home control interface, close-up, clean design, no text visible.",
+      "labels": ["一站控制", "灯光 窗帘 空调", "场景一键"]
+    },
+    {
+      "scene": "A modern living room with a small square touchscreen panel on the wall near the sofa, cozy warm light.",
+      "labels": ["小屏 6-10寸", "客厅 玄关", "449 起"]
+    },
+    {
+      "scene": "A larger wall-mounted touchscreen panel in a bright modern living room, sleek design, warm light.",
+      "labels": ["大屏 13寸", "全屋总控", "2099 起"]
+    },
+    {
+      "scene": "A person standing in a living room reaching toward a wall touchscreen panel, hand in frame, warm cozy home.",
+      "labels": []
+    },
+    {
+      "scene": "A top-down view of a light apartment floor plan with control screen positions marked in purple, diagram style.",
+      "labels": ["客厅 1", "玄关 1", "主卧 1", "预算够 每层1"]
+    }
+  ]
+}

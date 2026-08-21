@@ -1,0 +1,30 @@
+{
+  "style_prefix": "Light minimalist interior, real photo realism, no people, no hands, white and beige walls, light wood floor, soft natural daylight, clean and tidy.",
+  "negative_extra": "english text, english letters, alphabet, ascii, font, lettering, watermark, logo, foreign person, white person, black person, western face, long paragraphs, sentence, paragraph text",
+  "images": [
+    {
+      "scene": "A clean white distribution box on a wall, with neatly organized network cables, fiber optic cable and a small white mesh router inside, tidy installation.",
+      "labels": ["弱电箱 40x30cm", "光猫 进线", "网线 超六类", "光纤", "零线 备用"]
+    },
+    {
+      "scene": "A modern living room with a white mesh router standing on a low cabinet near the TV wall, subtle signal waves, clean and minimal.",
+      "labels": ["客厅 Mesh 主路由", "摆位 离地 40cm", "覆盖 30-50㎡"]
+    },
+    {
+      "scene": "A modern bedroom with a small white mesh node on the bedside table, warm cozy light, clean minimal interior.",
+      "labels": ["卧室 Mesh 子节点", "覆盖 30-50㎡", "漫游 无缝"]
+    },
+    {
+      "scene": "A white smart home gateway box plugged into a socket near the router, small compact device, clean and tidy.",
+      "labels": ["中枢网关 349", "网口直连主路由", "断网可本地运行"]
+    },
+    {
+      "scene": "Two mesh routers side by side on a white table, one labeled main and the other extended, clean product display, warm light.",
+      "labels": ["Mesh 组网", "主路由 客厅", "子路由 卧室/书房"]
+    },
+    {
+      "scene": "A top-down view of a light apartment floor plan with mesh nodes marked in blue circles, network coverage diagram style.",
+      "labels": ["客厅 主Mesh", "卧室 Mesh节点", "书房 Mesh节点", "覆盖无死角"]
+    }
+  ]
+}
