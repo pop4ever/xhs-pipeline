@@ -1,0 +1,17 @@
+{
+  "3":  {"class_type": "UNETLoader", "inputs": {"unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors", "weight_dtype": "default"}},
+  "5":  {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["3", 0], "lora_name": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "strength_model": 1.0}},
+  "4":  {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors", "type": "minimax", "device": "cpu"}},
+  "6":  {"class_type": "VAELoader", "inputs": {"vae_name": "minimax_h3_video_vae_fp16.safetensors"}},
+  "7":  {"class_type": "VAELoader", "inputs": {"vae_name": "minimax_h3_audio_vae_fp32.safetensors"}},
+  "8":  {"class_type": "MiniMaxH3ImageToVideo", "inputs": {"clip": ["4", 0], "vae": ["6", 0], "prompt": "A calm forest at sunrise, soft mist drifting over still water, slow gentle push-in, ambient birdsong and a light breeze.", "width": 640, "height": 352, "length": 73}},
+  "9":  {"class_type": "BasicGuider", "inputs": {"model": ["5", 0], "conditioning": ["8", 0]}},
+  "10": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "res_multistep"}},
+  "11": {"class_type": "BasicScheduler", "inputs": {"model": ["5", 0], "scheduler": "simple", "steps": 4, "denoise": 1.0}},
+  "12": {"class_type": "RandomNoise", "inputs": {"noise_seed": 1}},
+  "13": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["12", 0], "guider": ["9", 0], "sampler": ["10", 0], "sigmas": ["11", 0], "latent_image": ["8", 1]}},
+  "14": {"class_type": "VAEDecode", "inputs": {"samples": ["13", 0], "vae": ["6", 0]}},
+  "15": {"class_type": "VAEDecodeAudio", "inputs": {"samples": ["13", 1], "vae": ["7", 0]}},
+  "16": {"class_type": "SaveWEBM", "inputs": {"images": ["14", 0], "filename_prefix": "verifygate/h3_official", "codec": "vp9", "fps": 24.0, "crf": 32.0}},
+  "17": {"class_type": "SaveAudio", "inputs": {"audio": ["15", 0], "filename_prefix": "verifygate/h3_official_audio"}}
+}
