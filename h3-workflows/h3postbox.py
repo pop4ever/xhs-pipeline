@@ -279,7 +279,7 @@ class Params(BaseModel):
     seed: int = 1
     burn_subtitle: bool = True
     trim: bool = True
-    pad_video: bool = False
+    pad_video: bool = True   # 9/21 用户拍板默认: 口播超长→冻尾帧不截语音
     timeout_s: int = 1800
 
 @app.post("/jobs")
