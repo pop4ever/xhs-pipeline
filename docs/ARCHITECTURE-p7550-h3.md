@@ -83,9 +83,9 @@ data/job_*/final.mp4   （scp / GET /jobs/{id}/file 交付）
 
 显存账：unet int8 分块上卡 + 双 VAE ≈ **采样峰值 15.6 / 16GB**（720p 档贴边通过；124 帧 720p 预计 OOM，长段走 480p）。
 
-### 💤 死重 ≈58GB（待用户放行清理）
+### 🗑️ 死重 ≈85GB —— 已清理（2026-09-21 用户放行）
 
-- GGUF 全系：`MiniMax-H3-FL2VA-Pruned-Q3/Q4/Q5_K_M.gguf`、TE `qwen3vl_32b_minimax_h3-Q4_K_M.gguf`、nunchaku `svdq_int4_r32_minimax_h3_t2va.safetensors`(18.5GB)、`cand_8step_v1.0_bf16`、768p turbo 变体、int8 video VAE 残档
+- GGUF 全系（已删）：`MiniMax-H3-FL2VA-Pruned-Q3/Q4/Q5_K_M.gguf`、TE `qwen3vl_32b_minimax_h3-Q4_K_M.gguf`、nunchaku `svdq_int4_r32_minimax_h3_t2va.safetensors`(18.5GB)、`cand_8step_v1.0_bf16`、768p turbo 变体、int8 video VAE 残档(×3)
 - **废弃根因（坑 50）**：第三方 GGUF 把 `general.architecture` 错标成 `wan`（张量名却是 H3 packed-DiT）→ 加载器按错架构解释权重 → 端到端跑完必出纯噪声。与显存/量化档无关。
 - `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors` 15.7GB：Turing 无 FP4 硬件，备选未启用。
 
@@ -135,10 +135,92 @@ non_diegetic_music: N/A            # 无 BGM; b 模式垫的是环境音不是�
 - 不写 "no subtitles"（官方确认反效果）。
 - 真实产品必须写实际形态（H3 会把抽象设备脑补成错误东西，坑 47/圈图事故）。
 
-## 九、已知边界与后续
+## 九、从零部署 Runbook（新机复现全栈）
+
+> 前提：一台 Ubuntu 22.04+/24.04 + sm_75 以上 NVIDIA 卡（≥16GB 显存；8GB 只能跑 ≤480p 短视频）。全程约 1.5h（大头是 55GB 模型下载）。
+> 本仓库存档可直接用：`h3-workflows/{h3postbox.py, h3post.sh, wf_base.json, h3postbox.service}`。
+
+### 9.1 系统与 Docker
+
+```bash
+# NVIDIA 驱动（需支持 CUDA 12.4 容器栈；Ubuntu 24.04 用 550+）
+sudo apt install -y nvidia-driver-550 && sudo reboot
+# Docker CE + NVIDIA Container Toolkit
+sudo apt install -y docker.io && sudo usermod -aG docker $USER
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update && sudo apt install -y nvidia-container-toolkit && sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+# host 后期依赖（容器没有，全在这层）
+sudo apt install -y ffmpeg fonts-noto-cjk python3-venv
+# 无头常开三件套（gsettings 屏 5min 熄 + logind 不休眠 + HandleLidSwitch=ignore）见 INSTALL §9
+```
+
+### 9.2 模型（HF 镜像源，CN 网直连）
+
+```bash
+mkdir -p /mnt/models/comfy/{unet,text_encoders,vae,lora}
+cd /mnt/models/comfy
+# ⚠️ 只用官方 safetensors；GGUF/nunchaku 路线=坑50(architecture 错标 wan→纯噪声),别再下。
+# 下载校验用 x-linked-size 头比对字节数(坑:HF LFS 指针文件也是合法 safetensors 尺寸)。
+BASE=https://hf-mirror.com/Comfy-Org/MiniMax-H3/resolve/main
+curl -L -o unet/minimax_h3_fl2va_pruned_int8_convrot.safetensors        $BASE/sp/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors
+curl -L -o text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors $BASE/sp/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors
+curl -L -o vae/minimax_h3_video_vae_fp16.safetensors                     $BASE/sp/vae/minimax_h3_video_vae_fp16.safetensors
+curl -L -o vae/minimax_h3_audio_vae_fp32.safetensors                     $BASE/sp/vae/minimax_h3_audio_vae_fp32.safetensors
+# LoRA 在 lightx2v/MiniMax-H3-Turbo (HF);路径以仓库页面为准
+curl -L -o lora/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors \
+  https://hf-mirror.com/lightx2v/MiniMax-H3-Turbo/resolve/main/8step/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+# 逐个 wc -c 与 §四表对账: 20970379616 / 27141342152 / 5207808496 / 605254808 / 1956193000
+```
+
+### 9.3 ComfyUI 渲染容器（:8189）
+
+```bash
+# 镜像=官方 CUDA12.4 基底 + ComfyUI 0.36.0(自带 nodes_minimax_h3.py, 零自定义节点)。
+# p7550 的 comfy-h3:fixed 构建上下文若失传,重建:
+docker run -d --name h3-comfyui --gpus all --restart unless-stopped \
+  -v /mnt/models:/mnt/models -v /opt/comfy-out:/opt/ComfyUI/output -p 8189:8188 \
+  nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 sleep infinity
+# 容器内: apt 装 python3.11/git → clone ComfyUI@v0.36.0 → pip install -r requirements.txt torch(官方 cu124 wheel)
+# extra_model_paths.yaml(容器内 /opt/ComfyUI/):
+#   comfy-h3:\n  base_path: /mnt/models/comfy\n  unet: unet\n  diffusion_models: unet\n  text_encoders: text_encoders\n  vae: vae\n  loras: lora\n  clip: clip
+# 启动(注意: 不加 ffmpeg 依赖;--mmap+disable-smart-memory 是 27GB CPU TE 的关键):
+#   python3 /opt/ComfyUI/main.py --listen 0.0.0.0 --port 8188 --cache-lru 0 --disable-smart-memory --mmap
+# 验收: curl :8189/system_stats 出 GPU; object_info 里能查到 MiniMaxH3ImageToVideo/SaveWEBM/SaveAudio。
+```
+
+### 9.4 h3postbox（:8190, host systemd）
+
+```bash
+mkdir -p /home/$USER/h3postbox/data && cd /home/$USER/h3postbox
+python3 -m venv .venv && .venv/bin/pip install fastapi uvicorn edge-tts requests
+# 从本仓库取四件: h3postbox.py wf_base.json h3postbox.service h3post.sh
+sudo cp h3postbox.service /etc/systemd/system/   # 内含 Environment=COMFY_API/EDGE_TTS_PROXY/AMBIENT_GAIN
+sudo systemctl daemon-reload && sudo systemctl enable --now h3postbox
+curl -s http://127.0.0.1:8190/health   # → {"ok":true,"comfy_up":true}
+```
+
+### 9.5 端到端验证门（全绿才算装成）
+
+```bash
+# ① 横版基准门(应复现 ~222s@640×352×73, ±5% 内=正常):
+bash h3post.sh submit '{"prompt":"A calm forest at sunrise, soft mist over water, slow push-in, one continuous shot without cuts, no people, no watermark.","voice_text":"晨雾漫过湖面鸟鸣唤醒森林","length":73,"audio_mode":"b"}'
+# ② 三查(§五验收行): 逐流 duration / ebur128 peak>-1dBFS / 冻尾抽帧字幕在场
+# ③ 竖版门: 480×864×39 (~231s) 原生分辨率 ffprobe==请求值
+```
+
+### 9.6 新机特有注意
+
+- **卡型分界**：sm_89+（Ada/Turing 后）可换 nvfp4 AWQ 省盘省显存（本档 15.7GB 版被 Turing 无 FP4 淘汰，随 §四死重已删，需要时回官方仓重下）；sm_75/80 只有 int8_convrot。
+- **16GB 卡长段上限**：720p ≤56 帧；124 帧走 480p。24GB（3090/4090）可放宽。
+- edge-tts 要能出网（微软接口）；墙内配 `EDGE_TTS_PROXY`，或临时 `voice_text=""` 退化成纯环境音模式先验渲染链。
+- SaveAudio 静默失败（容器无 ffmpeg）属已知，找回逻辑在代码内，**别去容器里装 ffmpeg**（immutable 镜像，重启即失）。
+- 死重回填禁令：看到 `/mnt/models` 只有五件套是**故意的**，GGUF/nunchaku/nvfp4 全档已按 §四清理（2026-09-21 释放 85GB，余 839GB）。
+
+## 十、已知边界与后续
 
 - 长段：720p×124 帧预计 OOM（未测）；480×864×124 未实测，线性外推 ~400s 安全。
 - I2V/首尾帧（FL2VA 能力已在模型里，`MiniMaxH3ImageToVideo` 有 first/last_frame optional，未接进 h3postbox）。
 - SaveAudio 根修（给容器补 ffmpeg）可选；当前找回兜底够用。
-- GGUF 死重 58GB 清理待放行；RDMA35Patch 等 mini 老管线遗产与本机无关。
+- ~~GGUF 死重清理~~ ✅ 2026-09-21 已删 85GB（清单见 §四）；RDMA35Patch 等 mini 老管线遗产与本机无关。
 - edge-tts 依赖微软在线接口（有代理兜底但无常约）；断供时回退本地 TTS 未规划。
