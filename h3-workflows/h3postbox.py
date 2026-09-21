@@ -69,6 +69,15 @@ def comfy_render(p: dict, workdir: Path) -> dict:
                     if fn.endswith(".flac"): got["ambient"] = f
             if "webm" not in got:
                 raise RuntimeError("render done but no webm output")
+            if "ambient" not in got:
+                # SaveAudio only writes when ffmpeg exists (image-official has none) -> audio node
+                # silently produced no file. Same seed => deterministic audio; recover sibling .flac via /view.
+                stem = re.sub(r"_00001\.webm$", "", got["webm"]["filename"])
+                fn = f"{stem}_00001.flac"
+                vb = requests.get(f"{COMFY}/view", params={"filename": fn,
+                                   "subfolder": got["webm"].get("subfolder", ""), "type": "output"}, timeout=60)
+                if vb.ok and vb.content[:4] == b"fLaC":
+                    got["ambient"] = {"filename": fn, "subfolder": got["webm"].get("subfolder", ""), "type": "output"}
             out = {"prompt_id": pid}
             for k, f in got.items():
                 dst = workdir / ("seg.webm" if k == "webm" else "ambient.flac")
@@ -153,9 +162,15 @@ def ass_from_words(cues, lead, out_path, w, h, until=None):
     return str(out_path).replace(":", "\\:")
 
 # ---------------- 4. mux ----------------
-def mux(video, ambient, voice_mp3, mode, ass_path, out, voice_cap=None):
-    """voice_cap: seconds of voice to keep (cut tail, no pad) so audio never outlives video."""
+def mux(video, ambient, voice_mp3, mode, ass_path, out, voice_cap=None, pad_to=None):
+    """voice_cap: seconds of voice to keep (cut tail, no pad) so audio never outlives video.
+    pad_to: freeze video tail frames until this duration (no-truncation mode)."""
+    pad = f"-t {pad_to:.2f} " if pad_to else ""
+    tbe = f"-t {pad_to:.2f} " if pad_to else "-shortest "
+    tbe = "" if pad_to else "-shortest "   # tpad+stop_duration already sizes the video; let mux stop at longest
     vf = "format=yuv420p"
+    if pad_to:
+        vf = f"tpad=stop_mode=clone:stop_duration={pad_to:.2f},{vf}"   # freeze last frame (webm has no -loop)
     if ass_path:
         vf = f"ass={ass_path},{vf}"
     vc = f"[1:a]atrim=0:{voice_cap:.2f}," if voice_cap else "[1:a]"
@@ -165,16 +180,16 @@ def mux(video, ambient, voice_mp3, mode, ass_path, out, voice_cap=None):
     elif mode == "a":
         cmd = (f'ffmpeg -y -v error -i "{video}" -i "{voice_mp3}" -filter_complex '
                f'"{vc}loudnorm=I=-16:TP=-1.5:LRA=11[a]" -map 0:v:0 -map "[a]" '
-               f'-c:v libx264 -preset fast -crf 20 -vf "{vf}" -c:a aac -b:a 128k -ar 48000 -shortest "{out}"')
+               f'-c:v libx264 -preset fast -crf 20 -vf "{vf}" -c:a aac -b:a 128k -ar 48000 {tbe}"{out}"')
     else:  # b
         if ambient:
             fc = (f'{vc}loudnorm=I=-16:TP=-1.5:LRA=11[v];[2:a]volume={os.environ.get("AMBIENT_GAIN","-8dB")},afade=t=out:st={max(ffprobe_dur(ambient)-0.3,0):.2f}:d=0.3[amb];'
                   f'[v][amb]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.87[a]')
             cmd = (f'ffmpeg -y -v error -i "{video}" -i "{voice_mp3}" -i "{ambient}" -filter_complex '
                    f'"{fc}" -map 0:v:0 -map "[a]" '
-                   f'-c:v libx264 -preset fast -crf 20 -vf "{vf}" -c:a aac -b:a 128k -ar 48000 "{out}"')
+                   f'-c:v libx264 -preset fast -crf 20 -vf "{vf}" -c:a aac -b:a 128k -ar 48000 {tbe}"{out}"')
         else:  # no ambient from render -> degrade to a
-            return mux(video, None, voice_mp3, "a", ass_path, out, voice_cap)
+            return mux(video, None, voice_mp3, "a", ass_path, out, voice_cap, pad_to)
     sh(cmd)
     return out
 
@@ -207,22 +222,31 @@ def run_job(job):
             _save(job)
         job["stage"] = "mux"; _save(job)
         v_dur = ffprobe_dur(rd["webm"])
-        voice_cap = None
+        voice_cap, pad_to = None, None
         if voice_mp3:
             sp_avail = v_dur + lead          # speech-relative time the video can cover
             voice_dur = min(snd_end, ffprobe_dur(voice_mp3))
             if voice_dur > sp_avail:
-                voice_cap = sp_avail          # keep only what fits on video (speech-rel)
-                job["tts"]["clipped"] = True
+                if p.get("pad_video"):
+                    pad_to = voice_dur - v_dur + 0.5   # tpad extends video; whole voice kept
+                else:
+                    voice_cap = sp_avail      # keep only what fits on video (speech-rel)
+                    job["tts"]["clipped"] = True
+            job["tts"]["pad_video"] = bool(pad_to)
             if p["burn_subtitle"]:
                 job["stage"] = "subtitle"; _save(job)
                 ass_path = ass_from_words(cues, lead, jd / "subs.ass", p["width"], p["height"], until=voice_cap)
             _save(job)
-        mux(rd["webm"], rd.get("ambient"), voice_mp3, p["audio_mode"], ass_path, jd / "final_raw.mp4", voice_cap=voice_cap)
+        mux(rd["webm"], rd.get("ambient"), voice_mp3, p["audio_mode"], ass_path, jd / "final_raw.mp4",
+            voice_cap=voice_cap, pad_to=pad_to)
         if p["trim"] and p["audio_mode"] != "ambient" and snd_end:
             job["stage"] = "trim"; _save(job)
-            target = min(snd_end + 0.5, ffprobe_dur(jd / "final_raw.mp4"))
-            sh(f'ffmpeg -y -v error -i "{jd}/final_raw.mp4" -t {target:.2f} -c copy "{jd}/final.mp4"')
+            raw_dur = ffprobe_dur(jd / "final_raw.mp4")
+            target = min(snd_end + 0.5, raw_dur)
+            if target < raw_dur - 0.05:   # only trim when there's slack (pad mode: raw==speech+0.5, skip)
+                sh(f'ffmpeg -y -v error -i "{jd}/final_raw.mp4" -t {target:.2f} -c copy "{jd}/final.mp4"')
+            else:
+                shutil.move(str(jd / "final_raw.mp4"), str(jd / "final.mp4"))
         else:
             shutil.move(str(jd / "final_raw.mp4"), str(jd / "final.mp4"))
         d = ffprobe_dur(jd / "final.mp4")
@@ -241,6 +265,7 @@ class Params(BaseModel):
     seed: int = 1
     burn_subtitle: bool = True
     trim: bool = True
+    pad_video: bool = False
     timeout_s: int = 1800
 
 @app.post("/jobs")
