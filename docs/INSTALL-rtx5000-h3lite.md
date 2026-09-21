@@ -314,6 +314,8 @@ curl -s http://127.0.0.1:8189/system_stats | head -c 200   # RTX5000
 
 ## 10. 相关资产
 
+- **⭐ 现役架构总览（模型清单/服务拓扑/混流参数/性能基线/运维速查）**: `docs/ARCHITECTURE-p7550-h3.md`（2026-09-21 定稿）
+- **竖版性能实测**: `docs/h3perf-vertical-20260921.md` + 脚本 `.sh`（480×864×29→231s / 720×1280×42→902s / 原生分辨率核验法）
 - 现网 H3 管线: `~/projects/xhs-pipeline/`(workflows-video/, h3-workflows/, scripts/h3-video/)
 - 现网渲染事实与坑: skill `h3-video-pipeline`(480p/8步 ≈ 7.3min,直连提交官方三字段 prompt,音频 VAE fp32, CreateVideo+SaveVideo 节点名, filename_prefix 防混池, __pycache__ 坑)
 - 现网 ComfyUI 容器: mini-ai-svr `/opt/ComfyUI` + podman toolbox(`strix-halo-comfyui` 镜像, comfy-mutex-proxy :8189 模式可参考;7550 上两实例各自串行队列即可,或复刻 mutex proxy)
