@@ -72,12 +72,16 @@ def comfy_render(p: dict, workdir: Path) -> dict:
             if "ambient" not in got:
                 # SaveAudio only writes when ffmpeg exists (image-official has none) -> audio node
                 # silently produced no file. Same seed => deterministic audio; recover sibling .flac via /view.
-                stem = re.sub(r"_00001\.webm$", "", got["webm"]["filename"])
-                fn = f"{stem}_00001.flac"
+                stem = re.sub(r"\.webm$", "", got["webm"]["filename"])          # pb_XXX_00001_
+                stem = re.sub(r"_[0-9]+_$", "", stem)                            # pb_XXX
+                fn = f"{stem}_a_00001.flac"
                 vb = requests.get(f"{COMFY}/view", params={"filename": fn,
                                    "subfolder": got["webm"].get("subfolder", ""), "type": "output"}, timeout=60)
                 if vb.ok and vb.content[:4] == b"fLaC":
                     got["ambient"] = {"filename": fn, "subfolder": got["webm"].get("subfolder", ""), "type": "output"}
+                else:
+                    raise RuntimeError(f"render produced no ambient flac and recovery failed ({fn}); "
+                                       "b/ambient mode needs audio — rerun with container ffmpeg or use mode a")
             out = {"prompt_id": pid}
             for k, f in got.items():
                 dst = workdir / ("seg.webm" if k == "webm" else "ambient.flac")
@@ -130,15 +134,16 @@ def speech_lead_and_end(mp3):
     return lead, end
 
 # ---------------- 3. subtitle ----------------
-def ass_from_words(cues, lead, out_path, w, h, until=None):
+def ass_from_words(cues, lead, out_path, w, h, until=None, hold_to=None):
     """One line per chunk: <=14 chars or punctuation break; times shifted by -lead.
-    until: speech-relative cutoff — cues at/after it are dropped (clip mode)."""
+    until: speech-relative cutoff — cues at/after it are dropped (clip mode).
+    hold_to: speech-rel time; if last line ends earlier (pad mode freeze tail), extend it to hold_to."""
     lines, buf, buf_start, buf_last_end = [], "", None, None
     for c in cues:
         s, e = c["start"], c["start"] + c["dur"]
-        e = min(e, until) if until is not None else e
         if until is not None and s >= until:
             break
+        e = min(e, until) if until is not None else e
         if buf_start is None:
             buf_start = s
         buf += c["text"]
@@ -147,6 +152,9 @@ def ass_from_words(cues, lead, out_path, w, h, until=None):
             lines.append((buf, buf_start, buf_last_end)); buf, buf_start = "", None
     if buf.strip():
         lines.append((buf, buf_start, buf_last_end))
+    if hold_to is not None and lines:
+        t, s0, e0 = lines[-1]
+        lines[-1] = (t, s0, max(e0, hold_to))   # last line rides through the frozen tail
     def ts(t):
         t = max(t - lead, 0.0)
         return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
@@ -172,7 +180,7 @@ def mux(video, ambient, voice_mp3, mode, ass_path, out, voice_cap=None, pad_to=N
     if pad_to:
         vf = f"tpad=stop_mode=clone:stop_duration={pad_to:.2f},{vf}"   # freeze last frame (webm has no -loop)
     if ass_path:
-        vf = f"ass={ass_path},{vf}"
+        vf = f"{vf},ass={ass_path}"   # ass AFTER tpad: otherwise subtitle only covers original span, black gap has none
     vc = f"[1:a]atrim=0:{voice_cap:.2f}," if voice_cap else "[1:a]"
     if mode == "ambient":
         cmd = (f'ffmpeg -y -v error -i "{video}" -i "{ambient}" -map 0:v:0 -map 1:a:0 '
@@ -183,8 +191,11 @@ def mux(video, ambient, voice_mp3, mode, ass_path, out, voice_cap=None, pad_to=N
                f'-c:v libx264 -preset fast -crf 20 -vf "{vf}" -c:a aac -b:a 128k -ar 48000 {tbe}"{out}"')
     else:  # b
         if ambient:
-            fc = (f'{vc}loudnorm=I=-16:TP=-1.5:LRA=11[v];[2:a]volume={os.environ.get("AMBIENT_GAIN","-8dB")},afade=t=out:st={max(ffprobe_dur(ambient)-0.3,0):.2f}:d=0.3[amb];'
-                  f'[v][amb]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.87[a]')
+            # NOTE(2026-09-21 实测): loudnorm 单线程跑在 amix 上游会把 amix 输出流截到 ~1.3s
+            # (duration=first 不扩)。正确拓扑: 增益调环境音 -> amix(normalize=0) -> 全局 loudnorm -> limiter。
+            fc = (f'[2:a]volume={os.environ.get("AMBIENT_GAIN","-8dB")}[amb];'
+                  f'[1:a]aresample=48000[vo];[vo][amb]amix=inputs=2:duration=first:normalize=0,'
+                  f'loudnorm=I=-16:TP=-1.5:LRA=11,alimiter=limit=0.87[a]')
             cmd = (f'ffmpeg -y -v error -i "{video}" -i "{voice_mp3}" -i "{ambient}" -filter_complex '
                    f'"{fc}" -map 0:v:0 -map "[a]" '
                    f'-c:v libx264 -preset fast -crf 20 -vf "{vf}" -c:a aac -b:a 128k -ar 48000 {tbe}"{out}"')
@@ -222,20 +233,23 @@ def run_job(job):
             _save(job)
         job["stage"] = "mux"; _save(job)
         v_dur = ffprobe_dur(rd["webm"])
+        pad_dur = None
         voice_cap, pad_to = None, None
         if voice_mp3:
             sp_avail = v_dur + lead          # speech-relative time the video can cover
             voice_dur = min(snd_end, ffprobe_dur(voice_mp3))
             if voice_dur > sp_avail:
                 if p.get("pad_video"):
-                    pad_to = voice_dur - v_dur + 0.5   # tpad extends video; whole voice kept
+                    pad_to = voice_dur - v_dur + 0.5   # tpad stop_duration is EXTRA beyond video
+                    pad_dur = v_dur + pad_to            # total output length (subtitle must reach end)
                 else:
                     voice_cap = sp_avail      # keep only what fits on video (speech-rel)
                     job["tts"]["clipped"] = True
             job["tts"]["pad_video"] = bool(pad_to)
             if p["burn_subtitle"]:
                 job["stage"] = "subtitle"; _save(job)
-                ass_path = ass_from_words(cues, lead, jd / "subs.ass", p["width"], p["height"], until=voice_cap)
+                ass_path = ass_from_words(cues, lead, jd / "subs.ass", p["width"], p["height"],
+                                          until=voice_cap, hold_to=(pad_dur - lead) if pad_dur else None)
             _save(job)
         mux(rd["webm"], rd.get("ambient"), voice_mp3, p["audio_mode"], ass_path, jd / "final_raw.mp4",
             voice_cap=voice_cap, pad_to=pad_to)
